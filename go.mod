@@ -187,6 +187,7 @@ require (
 )
 
 require (
+	github.com/Th3Fr33m4n/udp_rcon v0.0.0-20221016003634-9c2a5aad5edb // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.13.6 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.0 // indirect
 	go.opentelemetry.io/otel/metric v0.32.1 // indirect
