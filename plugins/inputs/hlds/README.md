@@ -5,7 +5,7 @@ The `hlds` plugin gather metrics from GoldSrc HLDS Server.
 ## Configuration
 
 ```toml @sample.conf
-# Fetch metrics from a HLDS
+# Fetch metrics from a GoldSrc HLDS
 [[inputs.hlds]]
   ## Specify servers using the following format:
   ##    servers = [
