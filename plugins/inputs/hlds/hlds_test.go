@@ -30,7 +30,7 @@ func TestCPUStats(t *testing.T) {
 	}
 
 	require.Equal(t, "1.2.3.4:1234", acc.Metrics[0].Tags["host"])
-	require.Equal(t, "sv1", acc.Metrics[0].Tags["svname"])
+	require.Equal(t, "sv1", acc.Metrics[0].Tags["svid"])
 	require.Equal(t, expectedOutput.CPU, acc.Metrics[0].Fields["cpu"])
 	require.Equal(t, expectedOutput.NetIn, acc.Metrics[0].Fields["net_in"])
 	require.Equal(t, expectedOutput.NetOut, acc.Metrics[0].Fields["net_out"])

@@ -68,7 +68,7 @@ func (s *HLDS) gatherServer(
 		return errors.New("incorrect server config")
 	}
 
-	url, rconPw, svName := server[0], server[1], server[2]
+	url, rconPw, svId := server[0], server[1], server[2]
 	resp, err := request(url, rconPw)
 	if err != nil {
 		return err
@@ -126,7 +126,7 @@ func (s *HLDS) gatherServer(
 
 	tags := map[string]string{
 		"host": url,
-        "svname": svName,
+        "svid": svId,
 	}
 
 	var statsMap map[string]interface{}
@@ -155,5 +155,5 @@ func requestServer(url string, rconPw string) (string, error) {
 		return "", err
 	}
 
-	return string(*response), nil
+	return string((*response)[5:]), nil
 }

@@ -1,6 +1,6 @@
 # GoldSrc HLDS Input Plugin
 
-The `hlds` plugin gather metrics from GoldSrc HLDS Server.
+The `hlds` plugin gather metrics from GoldSrc HLDS.
 
 ## Configuration
 
@@ -27,7 +27,7 @@ If no servers are specified, no data will be collected
 - hlds
   - tags:
     - host
-    - svname
+    - svid
   - fields:
     - cpu (float)
     - net_in (float)
