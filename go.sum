@@ -255,10 +255,8 @@ github.com/Shopify/toxiproxy v2.1.4+incompatible/go.mod h1:OXgGpZ6Cli1/URJOF1DMx
 github.com/Shopify/toxiproxy/v2 v2.3.0/go.mod h1:KvQTtB6RjCJY4zqNJn7C7JDFgsG5uoHYDirfUfpIm0c=
 github.com/Shopify/toxiproxy/v2 v2.5.0 h1:i4LPT+qrSlKNtQf5QliVjdP08GyAH8+BUIc9gT0eahc=
 github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d/go.mod h1:3eOhrUMpNV+6aFIbp5/iudMxNCF27Vw2OZgy4xEx0Fg=
-github.com/StackExchange/wmi v0.0.0-20210224194228-fe8f1750fd46/go.mod h1:3eOhrUMpNV+6aFIbp5/iudMxNCF27Vw2OZgy4xEx0Fg=
-github.com/StackExchange/wmi v1.2.1/go.mod h1:rcmrprowKIVzvc+NUiLncP2uuArMWLCbu9SBzvHz7e8=
-github.com/Th3Fr33m4n/udp_rcon v0.0.0-20221016003634-9c2a5aad5edb h1:gDQPm3l8eDaWa5GohUwmVoVtyd+vm9kv9u6rjc27t3Q=
-github.com/Th3Fr33m4n/udp_rcon v0.0.0-20221016003634-9c2a5aad5edb/go.mod h1:bVb4EIoHDTQQMcHbfHudsxr7DUq9G1MP2q09tAHa9Uo=
+github.com/Th3Fr33m4n/udp_rcon v0.0.0-20221024002741-dd599dd193b0 h1:LA3kwnqruUQcp+TVmWrzlIeoGNxC8e+auVHnkUyRqt8=
+github.com/Th3Fr33m4n/udp_rcon v0.0.0-20221024002741-dd599dd193b0/go.mod h1:bVb4EIoHDTQQMcHbfHudsxr7DUq9G1MP2q09tAHa9Uo=
 github.com/VividCortex/gohistogram v1.0.0/go.mod h1:Pf5mBqqDxYaXu3hDrrU+w6nw50o/4+TcAqDqk/vUH7g=
 github.com/aerospike/aerospike-client-go/v5 v5.10.0 h1:+Vwl4x3Fqx8HHlLAydfDNUbjB4fJ9QvIv5PuiechDP8=
 github.com/aerospike/aerospike-client-go/v5 v5.10.0/go.mod h1:e/zYeIoBg9We63fLKa+h+198+fT1GdoLfKa+Pu4QSpg=

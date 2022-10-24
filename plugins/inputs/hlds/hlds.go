@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Th3Fr33m4n/udp_rcon/rcon"
+	"github.com/Th3Fr33m4n/udp_rcon"
 
 	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/plugins/inputs"

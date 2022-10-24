@@ -20,6 +20,7 @@ require (
 	github.com/Masterminds/sprig v2.22.0+incompatible
 	github.com/Mellanox/rdmamap v0.0.0-20191106181932-7c3c4763a6ee
 	github.com/Shopify/sarama v1.37.2
+	github.com/Th3Fr33m4n/udp_rcon v0.0.0-20221024002741-dd599dd193b0
 	github.com/aerospike/aerospike-client-go/v5 v5.10.0
 	github.com/alecthomas/units v0.0.0-20210208195552-ff826a37aa15
 	github.com/aliyun/alibaba-cloud-sdk-go v1.61.1818
@@ -187,7 +188,6 @@ require (
 )
 
 require (
-	github.com/Th3Fr33m4n/udp_rcon v0.0.0-20221016003634-9c2a5aad5edb // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.13.6 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.0 // indirect
 	github.com/uber/jaeger-client-go v2.30.0+incompatible // indirect
