@@ -1,6 +1,7 @@
 package xpath
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
@@ -12,11 +13,11 @@ import (
 	"github.com/doclambda/protobufquery"
 
 	"github.com/influxdata/telegraf"
+	"github.com/influxdata/telegraf/filter"
 	"github.com/influxdata/telegraf/internal"
 	"github.com/influxdata/telegraf/metric"
 	"github.com/influxdata/telegraf/models"
 	"github.com/influxdata/telegraf/plugins/parsers"
-	"github.com/influxdata/telegraf/plugins/parsers/temporary/xpath"
 )
 
 type dataNode interface{}
@@ -38,18 +39,43 @@ type Parser struct {
 	PrintDocument       bool              `toml:"xpath_print_document"`
 	AllowEmptySelection bool              `toml:"xpath_allow_empty_selection"`
 	NativeTypes         bool              `toml:"xpath_native_types"`
-	Configs             []xpath.Config    `toml:"xpath"`
+	Configs             []Config          `toml:"xpath"`
 	DefaultMetricName   string            `toml:"-"`
 	DefaultTags         map[string]string `toml:"-"`
 	Log                 telegraf.Logger   `toml:"-"`
 
 	// Required for backward compatibility
-	ConfigsXML     []xpath.Config `toml:"xml" deprecated:"1.23.1;use 'xpath' instead"`
-	ConfigsJSON    []xpath.Config `toml:"xpath_json"`
-	ConfigsMsgPack []xpath.Config `toml:"xpath_msgpack"`
-	ConfigsProto   []xpath.Config `toml:"xpath_protobuf"`
+	ConfigsXML     []Config `toml:"xml" deprecated:"1.23.1;use 'xpath' instead"`
+	ConfigsJSON    []Config `toml:"xpath_json" deprecated:"1.23.1;use 'xpath' instead"`
+	ConfigsMsgPack []Config `toml:"xpath_msgpack" deprecated:"1.23.1;use 'xpath' instead"`
+	ConfigsProto   []Config `toml:"xpath_protobuf" deprecated:"1.23.1;use 'xpath' instead"`
 
 	document dataDocument
+}
+
+type Config struct {
+	MetricQuery  string            `toml:"metric_name"`
+	Selection    string            `toml:"metric_selection"`
+	Timestamp    string            `toml:"timestamp"`
+	TimestampFmt string            `toml:"timestamp_format"`
+	Timezone     string            `toml:"timezone"`
+	Tags         map[string]string `toml:"tags"`
+	Fields       map[string]string `toml:"fields"`
+	FieldsInt    map[string]string `toml:"fields_int"`
+	FieldsHex    []string          `toml:"fields_bytes_as_hex"`
+
+	FieldSelection  string `toml:"field_selection"`
+	FieldNameQuery  string `toml:"field_name"`
+	FieldValueQuery string `toml:"field_value"`
+	FieldNameExpand bool   `toml:"field_name_expansion"`
+
+	TagSelection  string `toml:"tag_selection"`
+	TagNameQuery  string `toml:"tag_name"`
+	TagValueQuery string `toml:"tag_value"`
+	TagNameExpand bool   `toml:"tag_name_expansion"`
+
+	FieldsHexFilter filter.Filter
+	Location        *time.Location
 }
 
 func (p *Parser) Init() error {
@@ -129,6 +155,21 @@ func (p *Parser) Init() error {
 		if config.TimestampFmt == "" {
 			config.TimestampFmt = "unix"
 		}
+		if config.Timezone == "" {
+			config.Location = time.UTC
+		} else {
+			loc, err := time.LoadLocation(config.Timezone)
+			if err != nil {
+				return fmt.Errorf("invalid location in config %d: %w", i+1, err)
+			}
+			config.Location = loc
+		}
+		f, err := filter.Compile(config.FieldsHex)
+		if err != nil {
+			return fmt.Errorf("creating hex-fields filter failed: %w", err)
+		}
+		config.FieldsHexFilter = f
+
 		p.Configs[i] = config
 	}
 
@@ -194,7 +235,7 @@ func (p *Parser) SetDefaultTags(tags map[string]string) {
 	p.DefaultTags = tags
 }
 
-func (p *Parser) parseQuery(starttime time.Time, doc, selected dataNode, config xpath.Config) (telegraf.Metric, error) {
+func (p *Parser) parseQuery(starttime time.Time, doc, selected dataNode, config Config) (telegraf.Metric, error) {
 	var timestamp time.Time
 	var metricname string
 
@@ -204,7 +245,7 @@ func (p *Parser) parseQuery(starttime time.Time, doc, selected dataNode, config 
 	if len(config.MetricQuery) > 0 {
 		v, err := p.executeQuery(doc, selected, config.MetricQuery)
 		if err != nil {
-			return nil, fmt.Errorf("failed to query metric name: %v", err)
+			return nil, fmt.Errorf("failed to query metric name: %w", err)
 		}
 		var ok bool
 		if metricname, ok = v.(string); !ok {
@@ -221,10 +262,10 @@ func (p *Parser) parseQuery(starttime time.Time, doc, selected dataNode, config 
 	if len(config.Timestamp) > 0 {
 		v, err := p.executeQuery(doc, selected, config.Timestamp)
 		if err != nil {
-			return nil, fmt.Errorf("failed to query timestamp: %v", err)
+			return nil, fmt.Errorf("failed to query timestamp: %w", err)
 		}
 		if v != nil {
-			timestamp, err = internal.ParseTimestamp(config.TimestampFmt, v, "")
+			timestamp, err = internal.ParseTimestamp(config.TimestampFmt, v, config.Location)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse timestamp: %w", err)
 			}
@@ -237,7 +278,7 @@ func (p *Parser) parseQuery(starttime time.Time, doc, selected dataNode, config 
 		// Execute the query and cast the returned values into strings
 		v, err := p.executeQuery(doc, selected, query)
 		if err != nil {
-			return nil, fmt.Errorf("failed to query tag '%s': %v", name, err)
+			return nil, fmt.Errorf("failed to query tag %q: %w", name, err)
 		}
 		switch v := v.(type) {
 		case string:
@@ -249,7 +290,7 @@ func (p *Parser) parseQuery(starttime time.Time, doc, selected dataNode, config 
 		case nil:
 			continue
 		default:
-			return nil, fmt.Errorf("unknown format '%T' for tag '%s'", v, name)
+			return nil, fmt.Errorf("unknown format '%T' for tag %q", v, name)
 		}
 	}
 
@@ -274,15 +315,15 @@ func (p *Parser) parseQuery(starttime time.Time, doc, selected dataNode, config 
 			for _, selectedtag := range selectedTagNodes {
 				n, err := p.executeQuery(doc, selectedtag, tagnamequery)
 				if err != nil {
-					return nil, fmt.Errorf("failed to query tag name with query '%s': %v", tagnamequery, err)
+					return nil, fmt.Errorf("failed to query tag name with query %q: %w", tagnamequery, err)
 				}
 				name, ok := n.(string)
 				if !ok {
-					return nil, fmt.Errorf("failed to query tag name with query '%s': result is not a string (%v)", tagnamequery, n)
+					return nil, fmt.Errorf("failed to query tag name with query %q: result is not a string (%v)", tagnamequery, n)
 				}
 				v, err := p.executeQuery(doc, selectedtag, tagvaluequery)
 				if err != nil {
-					return nil, fmt.Errorf("failed to query tag value for '%s': %v", name, err)
+					return nil, fmt.Errorf("failed to query tag value for %q: %w", name, err)
 				}
 
 				if config.TagNameExpand {
@@ -306,7 +347,7 @@ func (p *Parser) parseQuery(starttime time.Time, doc, selected dataNode, config 
 				// Convert the tag to be a string
 				s, err := internal.ToString(v)
 				if err != nil {
-					return nil, fmt.Errorf("failed to query tag value for '%s': result is not a string (%v)", name, v)
+					return nil, fmt.Errorf("failed to query tag value for %q: result is not a string (%v)", name, v)
 				}
 				tags[name] = s
 			}
@@ -325,13 +366,13 @@ func (p *Parser) parseQuery(starttime time.Time, doc, selected dataNode, config 
 		// Execute the query and cast the returned values into integers
 		v, err := p.executeQuery(doc, selected, query)
 		if err != nil {
-			return nil, fmt.Errorf("failed to query field (int) '%s': %v", name, err)
+			return nil, fmt.Errorf("failed to query field (int) %q: %w", name, err)
 		}
 		switch v := v.(type) {
 		case string:
 			fields[name], err = strconv.ParseInt(v, 10, 54)
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse field (int) '%s': %v", name, err)
+				return nil, fmt.Errorf("failed to parse field (int) %q: %w", name, err)
 			}
 		case bool:
 			fields[name] = int64(0)
@@ -343,7 +384,7 @@ func (p *Parser) parseQuery(starttime time.Time, doc, selected dataNode, config 
 		case nil:
 			continue
 		default:
-			return nil, fmt.Errorf("unknown format '%T' for field (int) '%s'", v, name)
+			return nil, fmt.Errorf("unknown format '%T' for field (int) %q", v, name)
 		}
 	}
 
@@ -351,7 +392,7 @@ func (p *Parser) parseQuery(starttime time.Time, doc, selected dataNode, config 
 		// Execute the query and store the result in fields
 		v, err := p.executeQuery(doc, selected, query)
 		if err != nil {
-			return nil, fmt.Errorf("failed to query field '%s': %v", name, err)
+			return nil, fmt.Errorf("failed to query field %q: %w", name, err)
 		}
 		fields[name] = v
 	}
@@ -377,15 +418,15 @@ func (p *Parser) parseQuery(starttime time.Time, doc, selected dataNode, config 
 			for _, selectedfield := range selectedFieldNodes {
 				n, err := p.executeQuery(doc, selectedfield, fieldnamequery)
 				if err != nil {
-					return nil, fmt.Errorf("failed to query field name with query '%s': %v", fieldnamequery, err)
+					return nil, fmt.Errorf("failed to query field name with query %q: %w", fieldnamequery, err)
 				}
 				name, ok := n.(string)
 				if !ok {
-					return nil, fmt.Errorf("failed to query field name with query '%s': result is not a string (%v)", fieldnamequery, n)
+					return nil, fmt.Errorf("failed to query field name with query %q: result is not a string (%v)", fieldnamequery, n)
 				}
 				v, err := p.executeQuery(doc, selectedfield, fieldvaluequery)
 				if err != nil {
-					return nil, fmt.Errorf("failed to query field value for '%s': %v", name, err)
+					return nil, fmt.Errorf("failed to query field value for %q: %w", name, err)
 				}
 
 				if config.FieldNameExpand {
@@ -406,6 +447,11 @@ func (p *Parser) parseQuery(starttime time.Time, doc, selected dataNode, config 
 					}
 				}
 
+				if config.FieldsHexFilter != nil && config.FieldsHexFilter.Match(name) {
+					if b, ok := v.([]byte); ok {
+						v = hex.EncodeToString(b)
+					}
+				}
 				fields[name] = v
 			}
 		} else {
@@ -426,7 +472,7 @@ func (p *Parser) executeQuery(doc, selected dataNode, query string) (r interface
 	// Compile the query
 	expr, err := path.Compile(query)
 	if err != nil {
-		return nil, fmt.Errorf("failed to compile query '%s': %v", query, err)
+		return nil, fmt.Errorf("failed to compile query %q: %w", query, err)
 	}
 
 	// Evaluate the compiled expression and handle returned node-iterators
@@ -486,8 +532,8 @@ func splitLastPathElement(query string) []string {
 		base = "/"
 	}
 
-	elements := make([]string, 1)
-	elements[0] = base
+	elements := make([]string, 0, 3)
+	elements = append(elements, base)
 
 	offset := seperatorIdx
 	if i := strings.Index(query[offset:], "::"); i >= 0 {
@@ -573,24 +619,4 @@ func init() {
 			}
 		},
 	)
-}
-
-// InitFromConfig is a compatibility function to construct the parser the old way
-func (p *Parser) InitFromConfig(config *parsers.Config) error {
-	p.Format = config.DataFormat
-	if p.Format == "xpath_protobuf" {
-		p.ProtobufMessageDef = config.XPathProtobufFile
-		p.ProtobufMessageType = config.XPathProtobufType
-	}
-	p.PrintDocument = config.XPathPrintDocument
-	p.DefaultMetricName = config.MetricName
-	p.DefaultTags = config.DefaultTags
-
-	// Convert the config formats which is a one-to-one copy
-	if len(config.XPathConfig) > 0 {
-		p.Configs = make([]xpath.Config, 0, len(config.XPathConfig))
-		p.Configs = append(p.Configs, config.XPathConfig...)
-	}
-
-	return p.Init()
 }

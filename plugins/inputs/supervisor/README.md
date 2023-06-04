@@ -21,10 +21,20 @@ username = user
 password = pass
 ```
 
+## Global configuration options <!-- @/docs/includes/plugin_config.md -->
+
+In addition to the plugin-specific configuration settings, plugins support
+additional global and plugin configuration settings. These settings are used to
+modify metrics, tags, and field or create aliases and configure ordering, etc.
+See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
+
+[CONFIGURATION.md]: ../../../docs/CONFIGURATION.md#plugins
+
 ## Configuration
 
-```toml
-[inputs.supervisor]
+```toml @sample.conf
+# Gathers information about processes that running under supervisor using XML-RPC API
+[[inputs.supervisor]]
   ## Url of supervisor's XML-RPC endpoint if basic auth enabled in supervisor http server,
   ## than you have to add credentials to url (ex. http://login:pass@localhost:9001/RPC2)
   # url="http://localhost:9001/RPC2"
@@ -95,7 +105,7 @@ configuration file.
 
 ## Example Output
 
-```shell
+```text
 supervisor_processes,group=ExampleGroup,id=supervisor,port=9001,process=ExampleProcess,source=localhost state=20i,uptime=75958i 1659786637000000000
 supervisor_instance,id=supervisor,port=9001,source=localhost state=1i 1659786637000000000
 ```

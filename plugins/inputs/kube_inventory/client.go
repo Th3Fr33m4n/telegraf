@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
@@ -21,22 +22,32 @@ type client struct {
 }
 
 func newClient(baseURL, namespace, bearerTokenFile string, bearerToken string, timeout time.Duration, tlsConfig tls.ClientConfig) (*client, error) {
-	config := &rest.Config{
-		TLSClientConfig: rest.TLSClientConfig{
-			ServerName: tlsConfig.ServerName,
-			Insecure:   tlsConfig.InsecureSkipVerify,
-			CAFile:     tlsConfig.TLSCA,
-			CertFile:   tlsConfig.TLSCert,
-			KeyFile:    tlsConfig.TLSKey,
-		},
-		Host:          baseURL,
-		ContentConfig: rest.ContentConfig{},
-	}
+	var config *rest.Config
+	var err error
 
-	if bearerTokenFile != "" {
-		config.BearerTokenFile = bearerTokenFile
-	} else if bearerToken != "" {
-		config.BearerToken = bearerToken
+	if baseURL == "" {
+		config, err = rest.InClusterConfig()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		config = &rest.Config{
+			TLSClientConfig: rest.TLSClientConfig{
+				ServerName: tlsConfig.ServerName,
+				Insecure:   tlsConfig.InsecureSkipVerify,
+				CAFile:     tlsConfig.TLSCA,
+				CertFile:   tlsConfig.TLSCert,
+				KeyFile:    tlsConfig.TLSKey,
+			},
+			Host:          baseURL,
+			ContentConfig: rest.ContentConfig{},
+		}
+
+		if bearerTokenFile != "" {
+			config.BearerTokenFile = bearerTokenFile
+		} else if bearerToken != "" {
+			config.BearerToken = bearerToken
+		}
 	}
 
 	c, err := kubernetes.NewForConfig(config)
@@ -109,4 +120,19 @@ func (c *client) getStatefulSets(ctx context.Context) (*appsv1.StatefulSetList, 
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 	return c.AppsV1().StatefulSets(c.namespace).List(ctx, metav1.ListOptions{})
+}
+
+func (c *client) getResourceQuotas(ctx context.Context) (*corev1.ResourceQuotaList, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+	return c.CoreV1().ResourceQuotas(c.namespace).List(ctx, metav1.ListOptions{})
+}
+
+func (c *client) getTLSSecrets(ctx context.Context) (*corev1.SecretList, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+	labelSelector := metav1.LabelSelector{MatchLabels: map[string]string{"type": "kubernetes.io/tls"}}
+	return c.CoreV1().Secrets(c.namespace).List(ctx, metav1.ListOptions{
+		FieldSelector: labels.Set(labelSelector.MatchLabels).String(),
+	})
 }

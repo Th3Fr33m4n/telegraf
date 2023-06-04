@@ -18,7 +18,6 @@ import (
 	"github.com/influxdata/telegraf/internal"
 	"github.com/influxdata/telegraf/plugins/common/tls"
 	"github.com/influxdata/telegraf/plugins/inputs"
-	"github.com/influxdata/telegraf/plugins/parsers"
 	"github.com/influxdata/telegraf/selfstat"
 )
 
@@ -65,14 +64,14 @@ type MQTTConsumer struct {
 	Topics                 []string             `toml:"topics"`
 	TopicTag               *string              `toml:"topic_tag"`
 	TopicParsing           []TopicParsingConfig `toml:"topic_parsing"`
-	Username               string               `toml:"username"`
-	Password               string               `toml:"password"`
+	Username               config.Secret        `toml:"username"`
+	Password               config.Secret        `toml:"password"`
 	QoS                    int                  `toml:"qos"`
 	ConnectionTimeout      config.Duration      `toml:"connection_timeout"`
 	MaxUndeliveredMessages int                  `toml:"max_undelivered_messages"`
-	parser                 parsers.Parser
+	parser                 telegraf.Parser
 
-	MetricBuffer      int `toml:"metric_buffer" deprecated:"0.10.3;2.0.0;option is ignored"`
+	MetricBuffer      int `toml:"metric_buffer" deprecated:"0.10.3;1.30.0;option is ignored"`
 	PersistentSession bool
 	ClientID          string `toml:"client_id"`
 
@@ -98,7 +97,7 @@ func (*MQTTConsumer) SampleConfig() string {
 	return sampleConfig
 }
 
-func (m *MQTTConsumer) SetParser(parser parsers.Parser) {
+func (m *MQTTConsumer) SetParser(parser telegraf.Parser) {
 	m.parser = parser
 }
 func (m *MQTTConsumer) Init() error {
@@ -193,15 +192,14 @@ func (m *MQTTConsumer) connect() error {
 	subscribeToken := m.client.SubscribeMultiple(topics, m.recvMessage)
 	subscribeToken.Wait()
 	if subscribeToken.Error() != nil {
-		m.acc.AddError(fmt.Errorf("subscription error: topics: %s: %v",
-			strings.Join(m.Topics[:], ","), subscribeToken.Error()))
+		m.acc.AddError(fmt.Errorf("subscription error: topics %q: %w", strings.Join(m.Topics[:], ","), subscribeToken.Error()))
 	}
 	return nil
 }
 func (m *MQTTConsumer) onConnectionLost(_ mqtt.Client, err error) {
 	// Should already be disconnected, but make doubly sure
 	m.client.Disconnect(5)
-	m.acc.AddError(fmt.Errorf("connection lost: %v", err))
+	m.acc.AddError(fmt.Errorf("connection lost: %w", err))
 	m.Log.Debugf("Disconnected %v", m.Servers)
 	m.state = Disconnected
 }
@@ -320,7 +318,11 @@ func (m *MQTTConsumer) createOpts() (*mqtt.ClientOptions, error) {
 	opts := mqtt.NewClientOptions()
 	opts.ConnectTimeout = time.Duration(m.ConnectionTimeout)
 	if m.ClientID == "" {
-		opts.SetClientID("Telegraf-Consumer-" + internal.RandomString(5))
+		randomString, err := internal.RandomString(5)
+		if err != nil {
+			return nil, fmt.Errorf("generating random string for client ID failed: %w", err)
+		}
+		opts.SetClientID("Telegraf-Consumer-" + randomString)
 	} else {
 		opts.SetClientID(m.ClientID)
 	}
@@ -331,16 +333,25 @@ func (m *MQTTConsumer) createOpts() (*mqtt.ClientOptions, error) {
 	if tlsCfg != nil {
 		opts.SetTLSConfig(tlsCfg)
 	}
-	user := m.Username
-	if user != "" {
-		opts.SetUsername(user)
+	if !m.Username.Empty() {
+		user, err := m.Username.Get()
+		if err != nil {
+			return nil, fmt.Errorf("getting username failed: %w", err)
+		}
+		opts.SetUsername(string(user))
+		config.ReleaseSecret(user)
 	}
-	password := m.Password
-	if password != "" {
-		opts.SetPassword(password)
+
+	if !m.Password.Empty() {
+		password, err := m.Password.Get()
+		if err != nil {
+			return nil, fmt.Errorf("getting password failed: %w", err)
+		}
+		opts.SetPassword(string(password))
+		config.ReleaseSecret(password)
 	}
 	if len(m.Servers) == 0 {
-		return opts, fmt.Errorf("could not get host informations")
+		return opts, fmt.Errorf("could not get host information")
 	}
 	for _, server := range m.Servers {
 		// Preserve support for host:port style servers; deprecated in Telegraf 1.4.4
@@ -390,17 +401,17 @@ func typeConvert(types map[string]string, topicValue string, key string) (interf
 		case "uint":
 			newType, err = strconv.ParseUint(topicValue, 10, 64)
 			if err != nil {
-				return nil, fmt.Errorf("unable to convert field '%s' to type uint: %v", topicValue, err)
+				return nil, fmt.Errorf("unable to convert field %q to type uint: %w", topicValue, err)
 			}
 		case "int":
 			newType, err = strconv.ParseInt(topicValue, 10, 64)
 			if err != nil {
-				return nil, fmt.Errorf("unable to convert field '%s' to type int: %v", topicValue, err)
+				return nil, fmt.Errorf("unable to convert field %q to type int: %w", topicValue, err)
 			}
 		case "float":
 			newType, err = strconv.ParseFloat(topicValue, 64)
 			if err != nil {
-				return nil, fmt.Errorf("unable to convert field '%s' to type float: %v", topicValue, err)
+				return nil, fmt.Errorf("unable to convert field %q to type float: %w", topicValue, err)
 			}
 		default:
 			return nil, fmt.Errorf("converting to the type %s is not supported: use int, uint, or float", desiredType)

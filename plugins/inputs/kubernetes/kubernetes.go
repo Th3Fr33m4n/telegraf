@@ -2,13 +2,20 @@
 package kubernetes
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
+
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 
 	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/config"
@@ -38,11 +45,13 @@ type Kubernetes struct {
 
 	tls.ClientConfig
 
-	RoundTripper http.RoundTripper
+	Log telegraf.Logger `toml:"-"`
+
+	httpClient *http.Client
 }
 
 const (
-	defaultServiceAccountPath = "/run/secrets/kubernetes.io/serviceaccount/token"
+	defaultServiceAccountPath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 )
 
 func init() {
@@ -70,13 +79,81 @@ func (k *Kubernetes) Init() error {
 	}
 	k.labelFilter = labelFilter
 
+	if k.URL == "" {
+		k.InsecureSkipVerify = true
+	}
+
 	return nil
 }
 
 // Gather collects kubernetes metrics from a given URL
 func (k *Kubernetes) Gather(acc telegraf.Accumulator) error {
-	acc.AddError(k.gatherSummary(k.URL, acc))
+	if k.URL != "" {
+		acc.AddError(k.gatherSummary(k.URL, acc))
+		return nil
+	}
+
+	var wg sync.WaitGroup
+	nodeBaseURLs, err := getNodeURLs(k.Log)
+	if err != nil {
+		return err
+	}
+
+	for _, url := range nodeBaseURLs {
+		wg.Add(1)
+		go func(url string) {
+			defer wg.Done()
+			acc.AddError(k.gatherSummary(url, acc))
+		}(url)
+	}
+	wg.Wait()
+
 	return nil
+}
+
+func getNodeURLs(log telegraf.Logger) ([]string, error) {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	client, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	nodes, err := client.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	nodeUrls := make([]string, 0, len(nodes.Items))
+	for _, n := range nodes.Items {
+		address := getNodeAddress(n)
+		if address == "" {
+			log.Warnf("Unable to node addresses for Node %q", n.Name)
+			continue
+		}
+		nodeUrls = append(nodeUrls, "https://"+address+":10250")
+	}
+
+	return nodeUrls, nil
+}
+
+// Prefer internal addresses, if none found, use ExternalIP
+func getNodeAddress(node v1.Node) string {
+	extAddresses := make([]string, 0)
+
+	for _, addr := range node.Status.Addresses {
+		if addr.Type == v1.NodeInternalIP {
+			return addr.Address
+		}
+		extAddresses = append(extAddresses, addr.Address)
+	}
+
+	if len(extAddresses) > 0 {
+		return extAddresses[0]
+	}
+	return ""
 }
 
 func (k *Kubernetes) gatherSummary(baseURL string, acc telegraf.Accumulator) error {
@@ -144,16 +221,14 @@ func buildNodeMetrics(summaryMetrics *SummaryMetrics, acc telegraf.Accumulator) 
 	acc.AddFields("kubernetes_node", fields, tags)
 }
 
-func (k *Kubernetes) gatherPodInfo(baseURL string) ([]Metadata, error) {
+func (k *Kubernetes) gatherPodInfo(baseURL string) ([]Item, error) {
 	var podAPI Pods
 	err := k.LoadJSON(fmt.Sprintf("%s/pods", baseURL), &podAPI)
 	if err != nil {
 		return nil, err
 	}
-	var podInfos []Metadata
-	for _, podMetadata := range podAPI.Items {
-		podInfos = append(podInfos, podMetadata.Metadata)
-	}
+	podInfos := make([]Item, 0, len(podAPI.Items))
+	podInfos = append(podInfos, podAPI.Items...)
 	return podInfos, nil
 }
 
@@ -167,16 +242,22 @@ func (k *Kubernetes) LoadJSON(url string, v interface{}) error {
 	if err != nil {
 		return err
 	}
-	if k.RoundTripper == nil {
+
+	if k.httpClient == nil {
 		if k.ResponseTimeout < config.Duration(time.Second) {
 			k.ResponseTimeout = config.Duration(time.Second * 5)
 		}
-		k.RoundTripper = &http.Transport{
-			TLSHandshakeTimeout:   5 * time.Second,
-			TLSClientConfig:       tlsCfg,
-			ResponseHeaderTimeout: time.Duration(k.ResponseTimeout),
+		k.httpClient = &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: tlsCfg,
+			},
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+			Timeout: time.Duration(k.ResponseTimeout),
 		}
 	}
+
 	if k.BearerToken != "" {
 		token, err := os.ReadFile(k.BearerToken)
 		if err != nil {
@@ -186,9 +267,9 @@ func (k *Kubernetes) LoadJSON(url string, v interface{}) error {
 	}
 	req.Header.Set("Authorization", "Bearer "+k.BearerTokenString)
 	req.Header.Add("Accept", "application/json")
-	resp, err = k.RoundTripper.RoundTrip(req)
+	resp, err = k.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("error making HTTP request to %s: %s", url, err)
+		return fmt.Errorf("error making HTTP request to %q: %w", url, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -197,18 +278,22 @@ func (k *Kubernetes) LoadJSON(url string, v interface{}) error {
 
 	err = json.NewDecoder(resp.Body).Decode(v)
 	if err != nil {
-		return fmt.Errorf(`Error parsing response: %s`, err)
+		return fmt.Errorf("error parsing response: %w", err)
 	}
 
 	return nil
 }
 
-func buildPodMetrics(summaryMetrics *SummaryMetrics, podInfo []Metadata, labelFilter filter.Filter, acc telegraf.Accumulator) {
+func buildPodMetrics(summaryMetrics *SummaryMetrics, podInfo []Item, labelFilter filter.Filter, acc telegraf.Accumulator) {
 	for _, pod := range summaryMetrics.Pods {
 		podLabels := make(map[string]string)
+		containerImages := make(map[string]string)
 		for _, info := range podInfo {
-			if info.Name == pod.PodRef.Name && info.Namespace == pod.PodRef.Namespace {
-				for k, v := range info.Labels {
+			if info.Metadata.Name == pod.PodRef.Name && info.Metadata.Namespace == pod.PodRef.Namespace {
+				for _, v := range info.Spec.Containers {
+					containerImages[v.Name] = v.Image
+				}
+				for k, v := range info.Metadata.Labels {
 					if labelFilter.Match(k) {
 						podLabels[k] = v
 					}
@@ -222,6 +307,15 @@ func buildPodMetrics(summaryMetrics *SummaryMetrics, podInfo []Metadata, labelFi
 				"namespace":      pod.PodRef.Namespace,
 				"container_name": container.Name,
 				"pod_name":       pod.PodRef.Name,
+			}
+			for k, v := range containerImages {
+				if k == container.Name {
+					tags["image"] = v
+					tok := strings.Split(v, ":")
+					if len(tok) == 2 {
+						tags["version"] = tok[1]
+					}
+				}
 			}
 			for k, v := range podLabels {
 				tags[k] = v

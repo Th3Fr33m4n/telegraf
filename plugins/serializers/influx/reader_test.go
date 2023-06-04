@@ -127,9 +127,10 @@ func TestReader(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			serializer := NewSerializer()
-			serializer.SetMaxLineBytes(tt.maxLineBytes)
-			serializer.SetFieldSortOrder(SortFields)
+			serializer := &Serializer{
+				MaxLineBytes: tt.maxLineBytes,
+				SortFields:   true,
+			}
 			reader := NewReader(tt.input, serializer)
 
 			data := new(bytes.Buffer)
@@ -161,8 +162,9 @@ func TestZeroLengthBufferNoError(t *testing.T) {
 		},
 		time.Unix(0, 0),
 	)
-	serializer := NewSerializer()
-	serializer.SetFieldSortOrder(SortFields)
+	serializer := &Serializer{
+		SortFields: true,
+	}
 	reader := NewReader([]telegraf.Metric{m}, serializer)
 
 	readbuf := make([]byte, 0)
@@ -235,15 +237,15 @@ func BenchmarkReader(b *testing.B) {
 		},
 		time.Unix(0, 1517620624000000000),
 	)
-	metrics := make([]telegraf.Metric, 1000)
-	for i := range metrics {
-		metrics[i] = m
+	metrics := make([]telegraf.Metric, 0, 1000)
+	for i := 0; i < 1000; i++ {
+		metrics = append(metrics, m)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		readbuf := make([]byte, 4096)
-		serializer := NewSerializer()
+		serializer := &Serializer{}
 		reader := NewReader(metrics, serializer)
 		for {
 			_, err := reader.Read(readbuf)

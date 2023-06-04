@@ -85,7 +85,7 @@ func (p *Parser) Parse(input []byte) ([]telegraf.Metric, error) {
 
 	for {
 		err := p.machine.Next()
-		if err == EOF {
+		if errors.Is(err, EOF) {
 			break
 		}
 
@@ -100,11 +100,7 @@ func (p *Parser) Parse(input []byte) ([]telegraf.Metric, error) {
 			}
 		}
 
-		metric, err := p.handler.Metric()
-		if err != nil {
-			return nil, err
-		}
-
+		metric := p.handler.Metric()
 		if metric == nil {
 			continue
 		}
@@ -162,13 +158,6 @@ func (p *Parser) Init() error {
 	return nil
 }
 
-// InitFromConfig is a compatibility function to construct the parser the old way
-func (p *Parser) InitFromConfig(config *parsers.Config) error {
-	p.DefaultTags = config.DefaultTags
-
-	return p.Init()
-}
-
 func init() {
 	parsers.Add("influx",
 		func(_ string) telegraf.Parser {
@@ -207,11 +196,12 @@ func (sp *StreamParser) SetTimePrecision(u time.Duration) {
 // function if it returns ParseError to get the next metric or error.
 func (sp *StreamParser) Next() (telegraf.Metric, error) {
 	err := sp.machine.Next()
-	if err == EOF {
+	if errors.Is(err, EOF) {
 		return nil, err
 	}
 
-	if e, ok := err.(*readErr); ok {
+	var e *readErr
+	if errors.As(err, &e) {
 		return nil, e.Err
 	}
 
@@ -226,12 +216,7 @@ func (sp *StreamParser) Next() (telegraf.Metric, error) {
 		}
 	}
 
-	metric, err := sp.handler.Metric()
-	if err != nil {
-		return nil, err
-	}
-
-	return metric, nil
+	return sp.handler.Metric(), nil
 }
 
 // Position returns the current byte offset into the data.

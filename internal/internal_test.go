@@ -8,6 +8,7 @@ import (
 	"log"
 	"os/exec"
 	"regexp"
+	"sync"
 	"testing"
 	"time"
 
@@ -37,14 +38,14 @@ var tests = []SnakeTest{
 
 func TestSnakeCase(t *testing.T) {
 	for _, test := range tests {
-		if SnakeCase(test.input) != test.output {
-			t.Errorf(`SnakeCase("%s"), wanted "%s", got \%s"`, test.input, test.output, SnakeCase(test.input))
-		}
+		t.Run(test.input, func(t *testing.T) {
+			require.Equal(t, test.output, SnakeCase(test.input))
+		})
 	}
 }
 
 var (
-	sleepbin, _ = exec.LookPath("sleep") //nolint:unused // Used in skipped tests
+	sleepbin, _ = exec.LookPath("sleep")
 	echobin, _  = exec.LookPath("echo")
 	shell, _    = exec.LookPath("sh")
 )
@@ -174,9 +175,7 @@ func TestCompressWithGzip(t *testing.T) {
 	testData := "the quick brown fox jumps over the lazy dog"
 	inputBuffer := bytes.NewBuffer([]byte(testData))
 
-	outputBuffer, err := CompressWithGzip(inputBuffer)
-	require.NoError(t, err)
-
+	outputBuffer := CompressWithGzip(inputBuffer)
 	gzipReader, err := gzip.NewReader(outputBuffer)
 	require.NoError(t, err)
 	defer gzipReader.Close()
@@ -188,35 +187,69 @@ func TestCompressWithGzip(t *testing.T) {
 }
 
 type mockReader struct {
-	readN uint64 // record the number of calls to Read
+	err    error
+	ncalls uint64 // record the number of calls to Read
+	msg    []byte
 }
 
 func (r *mockReader) Read(p []byte) (n int, err error) {
-	r.readN++
-	return rand.Read(p)
+	r.ncalls++
+
+	if len(r.msg) > 0 {
+		n, err = copy(p, r.msg), io.EOF
+	} else {
+		n, err = rand.Read(p)
+	}
+	if r.err == nil {
+		return n, err
+	}
+	return n, r.err
 }
 
 func TestCompressWithGzipEarlyClose(t *testing.T) {
 	mr := &mockReader{}
 
-	rc, err := CompressWithGzip(mr)
-	require.NoError(t, err)
-
+	rc := CompressWithGzip(mr)
 	n, err := io.CopyN(io.Discard, rc, 10000)
 	require.NoError(t, err)
 	require.Equal(t, int64(10000), n)
 
-	r1 := mr.readN
-	err = rc.Close()
-	require.NoError(t, err)
+	r1 := mr.ncalls
+	require.NoError(t, rc.Close())
 
 	n, err = io.CopyN(io.Discard, rc, 10000)
-	require.Error(t, io.EOF, err)
+	require.ErrorIs(t, err, io.ErrClosedPipe)
 	require.Equal(t, int64(0), n)
 
-	r2 := mr.readN
+	r2 := mr.ncalls
 	// no more read to the source after closing
 	require.Equal(t, r1, r2)
+}
+
+func TestCompressWithGzipErrorPropagationCopy(t *testing.T) {
+	errs := []error{io.ErrClosedPipe, io.ErrNoProgress, io.ErrUnexpectedEOF}
+	for _, expected := range errs {
+		r := &mockReader{msg: []byte("this is a test"), err: expected}
+
+		rc := CompressWithGzip(r)
+		n, err := io.Copy(io.Discard, rc)
+		require.Greater(t, n, int64(0))
+		require.ErrorIs(t, err, expected)
+		require.NoError(t, rc.Close())
+	}
+}
+
+func TestCompressWithGzipErrorPropagationReadAll(t *testing.T) {
+	errs := []error{io.ErrClosedPipe, io.ErrNoProgress, io.ErrUnexpectedEOF}
+	for _, expected := range errs {
+		r := &mockReader{msg: []byte("this is a test"), err: expected}
+
+		rc := CompressWithGzip(r)
+		buf, err := io.ReadAll(rc)
+		require.NotEmpty(t, buf)
+		require.ErrorIs(t, err, expected)
+		require.NoError(t, rc.Close())
+	}
 }
 
 func TestAlignDuration(t *testing.T) {
@@ -317,38 +350,14 @@ func TestParseTimestamp(t *testing.T) {
 		return tm
 	}
 
-	unixdate := func(value string) time.Time {
-		tm, err := time.Parse(time.UnixDate, value)
-		require.NoError(t, err)
-		return tm
-	}
-
 	rubydate := func(value string) time.Time {
 		tm, err := time.Parse(time.RubyDate, value)
 		require.NoError(t, err)
 		return tm
 	}
 
-	rfc822 := func(value string) time.Time {
-		tm, err := time.Parse(time.RFC822, value)
-		require.NoError(t, err)
-		return tm
-	}
-
 	rfc822z := func(value string) time.Time {
 		tm, err := time.Parse(time.RFC822Z, value)
-		require.NoError(t, err)
-		return tm
-	}
-
-	rfc850 := func(value string) time.Time {
-		tm, err := time.Parse(time.RFC850, value)
-		require.NoError(t, err)
-		return tm
-	}
-
-	rfc1123 := func(value string) time.Time {
-		tm, err := time.Parse(time.RFC1123, value)
 		require.NoError(t, err)
 		return tm
 	}
@@ -548,7 +557,7 @@ func TestParseTimestamp(t *testing.T) {
 			name:      "UnixDate",
 			format:    "UnixDate",
 			timestamp: "Mon Jan 2 15:04:05 MST 2006",
-			expected:  unixdate("Mon Jan 2 15:04:05 MST 2006"),
+			expected:  time.Unix(1136239445, 0),
 			location:  "Local",
 		},
 
@@ -564,7 +573,7 @@ func TestParseTimestamp(t *testing.T) {
 			name:      "RFC822",
 			format:    "RFC822",
 			timestamp: "02 Jan 06 15:04 MST",
-			expected:  rfc822("02 Jan 06 15:04 MST"),
+			expected:  time.Unix(1136239440, 0),
 			location:  "Local",
 		},
 
@@ -580,7 +589,7 @@ func TestParseTimestamp(t *testing.T) {
 			name:      "RFC850",
 			format:    "RFC850",
 			timestamp: "Monday, 02-Jan-06 15:04:05 MST",
-			expected:  rfc850("Monday, 02-Jan-06 15:04:05 MST"),
+			expected:  time.Unix(1136239445, 0),
 			location:  "Local",
 		},
 
@@ -588,7 +597,7 @@ func TestParseTimestamp(t *testing.T) {
 			name:      "RFC1123",
 			format:    "RFC1123",
 			timestamp: "Mon, 02 Jan 2006 15:04:05 MST",
-			expected:  rfc1123("Mon, 02 Jan 2006 15:04:05 MST"),
+			expected:  time.Unix(1136239445, 0),
 			location:  "Local",
 		},
 
@@ -635,12 +644,25 @@ func TestParseTimestamp(t *testing.T) {
 			timestamp: "Jan 2 15:04:05.000000000",
 			expected:  stampnano("Jan 2 15:04:05.000000000"),
 		},
+
+		{
+			name:      "RFC850",
+			format:    "RFC850",
+			timestamp: "Monday, 02-Jan-06 15:04:05 MST",
+			expected:  time.Unix(1136239445, 0),
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tm, err := ParseTimestamp(tt.format, tt.timestamp, tt.location, tt.separator...)
+			var loc *time.Location
+			if tt.location != "" {
+				var err error
+				loc, err = time.LoadLocation(tt.location)
+				require.NoError(t, err)
+			}
+			tm, err := ParseTimestamp(tt.format, tt.timestamp, loc, tt.separator...)
 			require.NoError(t, err)
-			require.Equal(t, tt.expected, tm)
+			require.Equal(t, tt.expected.Unix(), tm.Unix())
 		})
 	}
 }
@@ -650,7 +672,6 @@ func TestParseTimestampInvalid(t *testing.T) {
 		name      string
 		format    string
 		timestamp interface{}
-		location  string
 		expected  string
 	}{
 		{
@@ -658,13 +679,6 @@ func TestParseTimestampInvalid(t *testing.T) {
 			format:    "2006-01-02 15:04:05",
 			timestamp: "2019-02-20 21:50",
 			expected:  "cannot parse \"\" as \":\"",
-		},
-		{
-			name:      "invalid timezone",
-			format:    "2006-01-02 15:04:05",
-			timestamp: "2019-02-20 21:50:34",
-			location:  "InvalidTimeZone",
-			expected:  "unknown time zone InvalidTimeZone",
 		},
 		{
 			name:      "invalid layout",
@@ -676,7 +690,7 @@ func TestParseTimestampInvalid(t *testing.T) {
 			name:      "layout not matching time",
 			format:    "rfc3339",
 			timestamp: "09.07.2019 00:11:00",
-			expected:  "cannot parse \"7.2019 00:11:00\" as \"2006\"",
+			expected:  "parsing time \"09.07.2019 00:11:00\" as \"2006-01-02T15:04:05Z07:00\": cannot parse",
 		},
 		{
 			name:      "unix wrong type",
@@ -702,13 +716,33 @@ func TestParseTimestampInvalid(t *testing.T) {
 			timestamp: "1,568,338,208.500",
 			expected:  "invalid number",
 		},
+		{
+			name:      "invalid timezone abbreviation",
+			format:    "RFC850",
+			timestamp: "Monday, 02-Jan-06 15:04:05 CDT",
+			expected:  "cannot resolve timezone abbreviation",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := ParseTimestamp(tt.format, tt.timestamp, tt.location)
+			_, err := ParseTimestamp(tt.format, tt.timestamp, nil)
 			require.ErrorContains(t, err, tt.expected)
 		})
 	}
+}
+
+func TestTimestampAbbrevWarning(t *testing.T) {
+	var buf bytes.Buffer
+	backup := log.Writer()
+	log.SetOutput(&buf)
+	defer log.SetOutput(backup)
+
+	once = sync.Once{}
+	ts, err := ParseTimestamp("RFC1123", "Mon, 02 Jan 2006 15:04:05 MST", nil)
+	require.NoError(t, err)
+	require.EqualValues(t, 1136239445, ts.Unix())
+
+	require.Contains(t, buf.String(), "Your config is using abbreviated timezones and parsing was changed in v1.27.0")
 }
 
 func TestProductToken(t *testing.T) {

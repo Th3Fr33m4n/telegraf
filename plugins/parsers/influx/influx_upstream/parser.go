@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/influxdata/line-protocol/v2/lineprotocol"
+
 	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/metric"
 	"github.com/influxdata/telegraf/plugins/parsers"
@@ -88,13 +89,13 @@ func (e *ParseError) Error() string {
 
 // convertToParseError attempts to convert a lineprotocol.DecodeError to a ParseError
 func convertToParseError(input []byte, rawErr error) error {
-	err, ok := rawErr.(*lineprotocol.DecodeError)
-	if !ok {
+	var decErr *lineprotocol.DecodeError
+	if !errors.As(rawErr, &decErr) {
 		return rawErr
 	}
 
 	return &ParseError{
-		DecodeError: err,
+		DecodeError: decErr,
 		buf:         string(input),
 	}
 }
@@ -187,13 +188,6 @@ func (p *Parser) Init() error {
 	return nil
 }
 
-// InitFromConfig is a compatibility function to construct the parser the old way
-func (p *Parser) InitFromConfig(config *parsers.Config) error {
-	p.DefaultTags = config.DefaultTags
-
-	return p.Init()
-}
-
 func init() {
 	parsers.Add("influx_upstream",
 		func(_ string) telegraf.Parser {
@@ -249,7 +243,7 @@ func (sp *StreamParser) SetTimePrecision(u time.Duration) error {
 // function if it returns ParseError to get the next metric or error.
 func (sp *StreamParser) Next() (telegraf.Metric, error) {
 	if !sp.decoder.Next() {
-		if err := sp.decoder.Err(); err != nil && err != sp.lastError {
+		if err := sp.decoder.Err(); err != nil && !errors.Is(err, sp.lastError) {
 			sp.lastError = err
 			return nil, err
 		}

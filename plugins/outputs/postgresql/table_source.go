@@ -19,13 +19,12 @@ func newColumnList() *columnList {
 	}
 }
 
-func (cl *columnList) Add(column utils.Column) bool {
+func (cl *columnList) Add(column utils.Column) {
 	if _, ok := cl.indices[column.Name]; ok {
-		return false
+		return
 	}
 	cl.columns = append(cl.columns, column)
 	cl.indices[column.Name] = len(cl.columns) - 1
-	return true
 }
 
 func (cl *columnList) Remove(name string) bool {
@@ -82,7 +81,7 @@ func NewTableSources(p *Postgresql, metrics []telegraf.Metric) map[string]*Table
 
 func NewTableSource(postgresql *Postgresql, name string) *TableSource {
 	h := fnv.New64a()
-	h.Write([]byte(name)) //nolint:revive // all Write() methods for hash in fnv.go returns nil err
+	h.Write([]byte(name))
 
 	tsrc := &TableSource{
 		postgresql:  postgresql,
@@ -180,9 +179,9 @@ func (tsrc *TableSource) TagTableColumns() []utils.Column {
 
 func (tsrc *TableSource) ColumnNames() []string {
 	cols := tsrc.MetricTableColumns()
-	names := make([]string, len(cols))
-	for i, col := range cols {
-		names[i] = col.Name
+	names := make([]string, 0, len(cols))
+	for _, col := range cols {
+		names = append(names, col.Name)
 	}
 	return names
 }
@@ -197,9 +196,9 @@ func (tsrc *TableSource) DropColumn(col utils.Column) error {
 	case utils.FieldColType:
 		return tsrc.dropFieldColumn(col)
 	case utils.TimeColType, utils.TagsIDColType:
-		return fmt.Errorf("critical column \"%s\"", col.Name)
+		return fmt.Errorf("critical column %q", col.Name)
 	default:
-		return fmt.Errorf("internal error: unknown column \"%s\"", col.Name)
+		return fmt.Errorf("internal error: unknown column %q", col.Name)
 	}
 }
 
@@ -371,9 +370,9 @@ func (ttsrc *TagTableSource) cacheTouch(tagID int64) {
 
 func (ttsrc *TagTableSource) ColumnNames() []string {
 	cols := ttsrc.TagTableColumns()
-	names := make([]string, len(cols))
-	for i, col := range cols {
-		names[i] = col.Name
+	names := make([]string, 0, len(cols))
+	for _, col := range cols {
+		names = append(names, col.Name)
 	}
 	return names
 }

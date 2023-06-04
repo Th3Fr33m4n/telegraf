@@ -19,7 +19,10 @@ func getTestCasesForOctetCounting(hasRemoteAddr bool) []testCaseStream {
 	testCases := []testCaseStream{
 		{
 			name: "1st/avg/ok",
-			data: []byte(`188 <29>1 2016-02-21T04:32:57+00:00 web1 someservice 2341 2 [origin][meta sequence="14125553" service="someservice"] "GET /v1/ok HTTP/1.1" 200 145 "-" "hacheck 0.9.0" 24306 127.0.0.1:40124 575`),
+			data: []byte(
+				`188 <29>1 2016-02-21T04:32:57+00:00 web1 someservice 2341 2 [origin][meta sequence="14125553" service="someservice"] ` +
+					`"GET /v1/ok HTTP/1.1" 200 145 "-" "hacheck 0.9.0" 24306 127.0.0.1:40124 575`,
+			),
 			wantStrict: []telegraf.Metric{
 				testutil.MustMetric(
 					"syslog",
@@ -384,7 +387,7 @@ func testStrictOctetCounting(t *testing.T, protocol string, address string, want
 			conn.Close()
 			require.NoError(t, err)
 
-			// Wait that the the number of data points is accumulated
+			// Wait that the number of data points is accumulated
 			// Since the receiver is running concurrently
 			if tc.wantStrict != nil {
 				acc.Wait(len(tc.wantStrict))
@@ -440,7 +443,7 @@ func testBestEffortOctetCounting(t *testing.T, protocol string, address string, 
 			require.NoError(t, err)
 			conn.Close()
 
-			// Wait that the the number of data points is accumulated
+			// Wait that the number of data points is accumulated
 			// Since the receiver is running concurrently
 			if tc.wantBestEffort != nil {
 				acc.Wait(len(tc.wantBestEffort))

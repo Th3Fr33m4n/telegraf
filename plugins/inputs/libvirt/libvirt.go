@@ -1,10 +1,12 @@
+//go:generate ../../../tools/readme_config_includer/generator
 package libvirt
 
 import (
 	_ "embed"
 	"fmt"
-	"golang.org/x/sync/errgroup"
 	"sync"
+
+	"golang.org/x/sync/errgroup"
 
 	golibvirt "github.com/digitalocean/go-libvirt"
 	libvirtutils "github.com/thomasklein94/packer-plugin-libvirt/libvirt-utils"
@@ -185,9 +187,9 @@ func (l *Libvirt) Gather(acc telegraf.Accumulator) error {
 func handleError(err error, errMessage string, utils utils) error {
 	if err != nil {
 		if chanErr := utils.Disconnect(); chanErr != nil {
-			return fmt.Errorf("%s: %v; error occurred when disconnecting: %v", errMessage, err, chanErr)
+			return fmt.Errorf("%s: %w; error occurred when disconnecting: %w", errMessage, err, chanErr)
 		}
-		return fmt.Errorf("%s: %v", errMessage, err)
+		return fmt.Errorf("%s: %w", errMessage, err)
 	}
 	return nil
 }

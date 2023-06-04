@@ -18,6 +18,15 @@ by the `resource_type` variable (default `global`).
 Additional resource labels can be configured by `resource_labels`. By default
 the required `project_id` label is always set to the `project` variable.
 
+## Global configuration options <!-- @/docs/includes/plugin_config.md -->
+
+In addition to the plugin-specific configuration settings, plugins support
+additional global and plugin configuration settings. These settings are used to
+modify metrics, tags, and field or create aliases and configure ordering, etc.
+See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
+
+[CONFIGURATION.md]: ../../../docs/CONFIGURATION.md#plugins
+
 ## Configuration
 
 ```toml @sample.conf
@@ -28,6 +37,10 @@ the required `project_id` label is always set to the `project` variable.
 
   ## The namespace for the metric descriptor
   namespace = "telegraf"
+
+  ## Metric Type Prefix
+  ## The DNS name used with the metric type as a prefix.
+  # metric_type_prefix = "custom.googleapis.com"
 
   ## Custom resource type
   # resource_type = "generic_node"

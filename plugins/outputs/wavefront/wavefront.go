@@ -8,10 +8,12 @@ import (
 	"regexp"
 	"strings"
 
+	wavefront "github.com/wavefronthq/wavefront-sdk-go/senders"
+
 	"github.com/influxdata/telegraf"
+	"github.com/influxdata/telegraf/config"
 	"github.com/influxdata/telegraf/plugins/outputs"
 	serializer "github.com/influxdata/telegraf/plugins/serializers/wavefront"
-	wavefront "github.com/wavefronthq/wavefront-sdk-go/senders"
 )
 
 //go:embed sample.conf
@@ -21,7 +23,7 @@ const maxTagLength = 254
 
 type Wavefront struct {
 	URL                  string                          `toml:"url"`
-	Token                string                          `toml:"token"`
+	Token                config.Secret                   `toml:"token"`
 	Host                 string                          `toml:"host" deprecated:"2.4.0;use url instead"`
 	Port                 int                             `toml:"port" deprecated:"2.4.0;use url instead"`
 	Prefix               string                          `toml:"prefix"`
@@ -41,24 +43,7 @@ type Wavefront struct {
 	Log    telegraf.Logger `toml:"-"`
 }
 
-// catch many of the invalid chars that could appear in a metric or tag name
-var sanitizedChars = strings.NewReplacer(
-	"!", "-", "@", "-", "#", "-", "$", "-", "%", "-", "^", "-", "&", "-",
-	"*", "-", "(", "-", ")", "-", "+", "-", "`", "-", "'", "-", "\"", "-",
-	"[", "-", "]", "-", "{", "-", "}", "-", ":", "-", ";", "-", "<", "-",
-	">", "-", ",", "-", "?", "-", "/", "-", "\\", "-", "|", "-", " ", "-",
-	"=", "-",
-)
-
-// catch many of the invalid chars that could appear in a metric or tag name
-var strictSanitizedChars = strings.NewReplacer(
-	"!", "-", "@", "-", "#", "-", "$", "-", "%", "-", "^", "-", "&", "-",
-	"*", "-", "(", "-", ")", "-", "+", "-", "`", "-", "'", "-", "\"", "-",
-	"[", "-", "]", "-", "{", "-", "}", "-", ":", "-", ";", "-", "<", "-",
-	">", "-", "?", "-", "\\", "-", "|", "-", " ", "-", "=", "-",
-)
-
-// instead of Replacer which may miss some special characters we can use a regex pattern, but this is significantly slower than Replacer
+// instead of Sanitize which may miss some special characters we can use a regex pattern, but this is significantly slower than Sanitize
 var sanitizedRegex = regexp.MustCompile(`[^a-zA-Z\d_.-]`)
 
 var tagValueReplacer = strings.NewReplacer("*", "-")
@@ -69,10 +54,20 @@ func (*Wavefront) SampleConfig() string {
 	return sampleConfig
 }
 
-func senderURLFromURLAndToken(rawURL, token string) (string, error) {
-	newURL, err := url.Parse(rawURL)
+func (w *Wavefront) senderURLFromURLAndToken() (string, error) {
+	newURL, err := url.Parse(w.URL)
 	if err != nil {
-		return "", fmt.Errorf("could not parse the provided Url: %s", rawURL)
+		return "", fmt.Errorf("could not parse the provided URL: %s", w.URL)
+	}
+
+	token := "DUMMY_TOKEN"
+	if !w.Token.Empty() {
+		b, err := w.Token.Get()
+		if err != nil {
+			return "", fmt.Errorf("getting token failed: %w", err)
+		}
+		token = string(b)
+		config.ReleaseSecret(b)
 	}
 	newURL.User = url.User(token)
 
@@ -91,7 +86,7 @@ func (w *Wavefront) Connect() error {
 	var connectionURL string
 	if w.URL != "" {
 		w.Log.Debug("connecting over http/https using Url: %s", w.URL)
-		connectionURLWithToken, err := senderURLFromURLAndToken(w.URL, w.Token)
+		connectionURLWithToken, err := w.senderURLFromURLAndToken()
 		if err != nil {
 			return err
 		}
@@ -128,13 +123,22 @@ func (w *Wavefront) Write(metrics []telegraf.Metric) error {
 			err := w.sender.SendMetric(point.Metric, point.Value, point.Timestamp, point.Source, point.Tags)
 			if err != nil {
 				if isRetryable(err) {
-					if flushErr := w.sender.Flush(); flushErr != nil {
-						w.Log.Errorf("wavefront flushing error: %v", flushErr)
+					// The internal buffer in the Wavefront SDK is full. To prevent data loss,
+					// we flush the buffer (which is a blocking operation) and try again.
+					w.Log.Debug("SDK buffer overrun, forcibly flushing the buffer")
+					if err = w.sender.Flush(); err != nil {
+						return fmt.Errorf("wavefront flushing error: %w", err)
 					}
-					return fmt.Errorf("wavefront sending error: %v", err)
+					// Try again.
+					err = w.sender.SendMetric(point.Metric, point.Value, point.Timestamp, point.Source, point.Tags)
+					if err != nil {
+						if isRetryable(err) {
+							return fmt.Errorf("wavefront sending error: %w", err)
+						}
+					}
 				}
 				w.Log.Errorf("non-retryable error during Wavefront.Write: %v", err)
-				w.Log.Debugf("Non-retryable metric data: Name: %v, Value: %v, Timestamp: %v, Source: %v, PointTags: %v ", point.Metric, point.Value, point.Timestamp, point.Source, point.Tags)
+				w.Log.Debugf("non-retryable metric data: %+v", point)
 			}
 		}
 	}
@@ -158,10 +162,8 @@ func (w *Wavefront) buildMetrics(m telegraf.Metric) []*serializer.MetricPoint {
 
 		if w.UseRegex {
 			name = sanitizedRegex.ReplaceAllLiteralString(name, "-")
-		} else if w.UseStrict {
-			name = strictSanitizedChars.Replace(name)
 		} else {
-			name = sanitizedChars.Replace(name)
+			name = serializer.Sanitize(w.UseStrict, name)
 		}
 
 		if w.ConvertPaths {
@@ -237,10 +239,8 @@ func (w *Wavefront) buildTags(mTags map[string]string) (string, map[string]strin
 		var key string
 		if w.UseRegex {
 			key = sanitizedRegex.ReplaceAllLiteralString(k, "-")
-		} else if w.UseStrict {
-			key = strictSanitizedChars.Replace(k)
 		} else {
-			key = sanitizedChars.Replace(k)
+			key = serializer.Sanitize(w.UseStrict, k)
 		}
 		val := tagValueReplacer.Replace(v)
 		if w.TruncateTags {
@@ -300,7 +300,6 @@ func (w *Wavefront) Close() error {
 func init() {
 	outputs.Add("wavefront", func() telegraf.Output {
 		return &Wavefront{
-			Token:                "DUMMY_TOKEN",
 			MetricSeparator:      ".",
 			ConvertPaths:         true,
 			ConvertBool:          true,

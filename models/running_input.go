@@ -58,16 +58,18 @@ func NewRunningInput(input telegraf.Input, config *InputConfig) *RunningInput {
 type InputConfig struct {
 	Name             string
 	Alias            string
+	ID               string
 	Interval         time.Duration
 	CollectionJitter time.Duration
 	CollectionOffset time.Duration
 	Precision        time.Duration
 
-	NameOverride      string
-	MeasurementPrefix string
-	MeasurementSuffix string
-	Tags              map[string]string
-	Filter            Filter
+	NameOverride           string
+	MeasurementPrefix      string
+	MeasurementSuffix      string
+	Tags                   map[string]string
+	Filter                 Filter
+	AlwaysIncludeLocalTags bool
 }
 
 func (r *RunningInput) metricFiltered(metric telegraf.Metric) {
@@ -88,10 +90,25 @@ func (r *RunningInput) Init() error {
 	return nil
 }
 
+func (r *RunningInput) ID() string {
+	if p, ok := r.Input.(telegraf.PluginWithID); ok {
+		return p.ID()
+	}
+	return r.Config.ID
+}
+
 func (r *RunningInput) MakeMetric(metric telegraf.Metric) telegraf.Metric {
-	if ok := r.Config.Filter.Select(metric); !ok {
+	ok, err := r.Config.Filter.Select(metric)
+	if err != nil {
+		r.log.Errorf("filtering failed: %v", err)
+	} else if !ok {
 		r.metricFiltered(metric)
 		return nil
+	}
+
+	tags := r.Config.Tags
+	if r.Config.AlwaysIncludeLocalTags {
+		tags = nil
 	}
 
 	m := makemetric(
@@ -99,13 +116,22 @@ func (r *RunningInput) MakeMetric(metric telegraf.Metric) telegraf.Metric {
 		r.Config.NameOverride,
 		r.Config.MeasurementPrefix,
 		r.Config.MeasurementSuffix,
-		r.Config.Tags,
+		tags,
 		r.defaultTags)
 
 	r.Config.Filter.Modify(metric)
 	if len(metric.FieldList()) == 0 {
 		r.metricFiltered(metric)
 		return nil
+	}
+
+	if r.Config.AlwaysIncludeLocalTags {
+		// Apply plugin tags after filtering
+		for k, v := range r.Config.Tags {
+			if _, ok := metric.GetTag(k); !ok {
+				metric.AddTag(k, v)
+			}
+		}
 	}
 
 	r.MetricsGathered.Incr(1)

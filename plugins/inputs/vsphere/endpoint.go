@@ -14,12 +14,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/influxdata/telegraf"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/performance"
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
 
+	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/filter"
 )
 
@@ -60,6 +60,7 @@ type Endpoint struct {
 	metricNameLookup  map[int32]string
 	metricNameMux     sync.RWMutex
 	log               telegraf.Logger
+	apiVersion        string
 }
 
 type resourceKind struct {
@@ -237,6 +238,23 @@ func NewEndpoint(ctx context.Context, parent *VSphere, address *url.URL, log tel
 			getObjects:       getDatastores,
 			parent:           "",
 		},
+		"vsan": {
+			name:             "vsan",
+			vcName:           "ClusterComputeResource",
+			pKey:             "clustername",
+			parentTag:        "dcname",
+			enabled:          anythingEnabled(parent.VSANMetricExclude),
+			realTime:         false,
+			sampling:         300,
+			objects:          make(objectMap),
+			filters:          newFilterOrPanic(parent.VSANMetricInclude, parent.VSANMetricExclude),
+			paths:            parent.VSANClusterInclude,
+			simple:           parent.VSANMetricSkipVerify,
+			include:          parent.VSANMetricInclude,
+			collectInstances: false,
+			getObjects:       getClusters,
+			parent:           "datacenter",
+		},
 	}
 
 	// Start discover and other goodness
@@ -257,7 +275,7 @@ func anythingEnabled(ex []string) bool {
 func newFilterOrPanic(include []string, exclude []string) filter.Filter {
 	f, err := filter.NewIncludeExcludeFilter(include, exclude)
 	if err != nil {
-		panic(fmt.Sprintf("Include/exclude filters are invalid: %s", err))
+		panic(fmt.Sprintf("Include/exclude filters are invalid: %v", err))
 	}
 	return f
 }
@@ -281,7 +299,7 @@ func (e *Endpoint) startDiscovery(ctx context.Context) {
 			select {
 			case <-e.discoveryTicker.C:
 				err := e.discover(ctx)
-				if err != nil && err != context.Canceled {
+				if err != nil && !errors.Is(err, context.Canceled) {
 					e.log.Errorf("Discovery for %s: %s", e.URL.Host, err.Error())
 				}
 			case <-ctx.Done():
@@ -295,7 +313,7 @@ func (e *Endpoint) startDiscovery(ctx context.Context) {
 
 func (e *Endpoint) initalDiscovery(ctx context.Context) {
 	err := e.discover(ctx)
-	if err != nil && err != context.Canceled {
+	if err != nil && !errors.Is(err, context.Canceled) {
 		e.log.Errorf("Discovery for %s: %s", e.URL.Host, err.Error())
 	}
 	e.startDiscovery(ctx)
@@ -304,7 +322,17 @@ func (e *Endpoint) initalDiscovery(ctx context.Context) {
 func (e *Endpoint) init(ctx context.Context) error {
 	client, err := e.clientFactory.GetClient(ctx)
 	if err != nil {
-		return err
+		switch e.Parent.DisconnectedServersBehavior {
+		case "error":
+			return err
+		case "ignore":
+			// Ignore the error and postpone the init until next collection cycle
+			e.log.Warnf("Error connecting to vCenter on init: %s", err)
+			return nil
+		default:
+			return fmt.Errorf("%q is not a valid value for disconnected_servers_behavior",
+				e.Parent.DisconnectedServersBehavior)
+		}
 	}
 
 	// Initial load of custom field metadata
@@ -369,7 +397,13 @@ func (e *Endpoint) getDatacenterName(ctx context.Context, client *Client, cache 
 	return e.getAncestorName(ctx, client, "Datacenter", cache, r)
 }
 
-func (e *Endpoint) getAncestorName(ctx context.Context, client *Client, resourceType string, cache map[string]string, r types.ManagedObjectReference) (string, bool) {
+func (e *Endpoint) getAncestorName(
+	ctx context.Context,
+	client *Client,
+	resourceType string,
+	cache map[string]string,
+	r types.ManagedObjectReference,
+) (string, bool) {
 	path := make([]string, 0)
 	returnVal := ""
 	here := r
@@ -429,7 +463,10 @@ func (e *Endpoint) discover(ctx context.Context) error {
 		return err
 	}
 
-	e.log.Debugf("Discover new objects for %s", e.URL.Host)
+	// get the vSphere API version
+	e.apiVersion = client.Client.ServiceContent.About.ApiVersion
+
+	e.Parent.Log.Debugf("Discover new objects for %s", e.URL.Host)
 	dcNameCache := make(map[string]string)
 
 	numRes := int64(0)
@@ -439,7 +476,7 @@ func (e *Endpoint) discover(ctx context.Context) error {
 	for k, res := range e.resourceKinds {
 		e.log.Debugf("Discovering resources for %s", res.name)
 		// Need to do this for all resource types even if they are not enabled
-		if res.enabled || k != "vm" {
+		if res.enabled || (k != "vm" && k != "vsan") {
 			rf := ResourceFilter{
 				finder:       &Finder{client},
 				resType:      res.vcName,
@@ -464,7 +501,8 @@ func (e *Endpoint) discover(ctx context.Context) error {
 			}
 
 			// No need to collect metric metadata if resource type is not enabled
-			if res.enabled {
+			// VSAN is also skipped since vSAN metadata follow it's own format
+			if res.enabled && k != "vsan" {
 				if res.simple {
 					e.simpleMetadataSelect(ctx, client, res)
 				} else {
@@ -545,17 +583,15 @@ func (e *Endpoint) simpleMetadataSelect(ctx context.Context, client *Client, res
 func (e *Endpoint) complexMetadataSelect(ctx context.Context, res *resourceKind, objects objectMap) {
 	// We're only going to get metadata from maxMetadataSamples resources. If we have
 	// more resources than that, we pick maxMetadataSamples samples at random.
-	sampledObjects := make([]*objectRef, len(objects))
-	i := 0
+	sampledObjects := make([]*objectRef, 0, len(objects))
 	for _, obj := range objects {
-		sampledObjects[i] = obj
-		i++
+		sampledObjects = append(sampledObjects, obj)
 	}
 	n := len(sampledObjects)
 	if n > maxMetadataSamples {
 		// Shuffle samples into the maxMetadataSamples positions
 		for i := 0; i < maxMetadataSamples; i++ {
-			j := int(rand.Int31n(int32(i + 1)))
+			j := int(rand.Int31n(int32(i + 1))) //nolint:gosec // G404: not security critical
 			t := sampledObjects[i]
 			sampledObjects[i] = sampledObjects[j]
 			sampledObjects[j] = t
@@ -885,6 +921,15 @@ func (e *Endpoint) Close() {
 
 // Collect runs a round of data collections as specified in the configuration.
 func (e *Endpoint) Collect(ctx context.Context, acc telegraf.Accumulator) error {
+	// Connection could have failed on init, so we need to check for a deferred
+	// init request.
+	if !e.initialized {
+		e.log.Debug("Performing deferred init")
+		err := e.init(ctx)
+		if err != nil {
+			return err
+		}
+	}
 	// If we never managed to do a discovery, collection will be a no-op. Therefore,
 	// we need to check that a connection is available, or the collection will
 	// silently fail.
@@ -912,7 +957,12 @@ func (e *Endpoint) Collect(ctx context.Context, acc telegraf.Accumulator) error 
 			wg.Add(1)
 			go func(k string) {
 				defer wg.Done()
-				err := e.collectResource(ctx, k, acc)
+				var err error
+				if k == "vsan" {
+					err = e.collectVsan(ctx, acc)
+				} else {
+					err = e.collectResource(ctx, k, acc)
+				}
 				if err != nil {
 					acc.AddError(err)
 				}
@@ -963,7 +1013,10 @@ func (e *Endpoint) chunkify(ctx context.Context, res *resourceKind, now time.Tim
 			if !ok {
 				start = latest.Add(time.Duration(-res.sampling) * time.Second * (time.Duration(e.Parent.MetricLookback) - 1))
 			}
-			start = start.Truncate(20 * time.Second) // Truncate to maximum resolution
+
+			if !start.Truncate(time.Second).Before(now.Truncate(time.Second)) {
+				e.log.Debugf("Start >= end (rounded to seconds): %s > %s", start, now)
+			}
 
 			// Create bucket if we don't already have it
 			bucket, ok := timeBuckets[start.Unix()]
@@ -990,7 +1043,7 @@ func (e *Endpoint) chunkify(ctx context.Context, res *resourceKind, now time.Tim
 					len(bucket.MetricId), len(res.metrics)-metricIdx, res.name, e.URL.Host, len(res.objects))
 
 				// Don't send work items if the context has been cancelled.
-				if ctx.Err() == context.Canceled {
+				if errors.Is(ctx.Err(), context.Canceled) {
 					return
 				}
 
@@ -1139,7 +1192,13 @@ func (e *Endpoint) alignSamples(info []types.PerfSampleInfo, values []int64, int
 	return rInfo, rValues
 }
 
-func (e *Endpoint) collectChunk(ctx context.Context, pqs queryChunk, res *resourceKind, acc telegraf.Accumulator, interval time.Duration) (int, time.Time, error) {
+func (e *Endpoint) collectChunk(
+	ctx context.Context,
+	pqs queryChunk,
+	res *resourceKind,
+	acc telegraf.Accumulator,
+	interval time.Duration,
+) (int, time.Time, error) {
 	e.log.Debugf("Query for %s has %d QuerySpecs", res.name, len(pqs))
 	latestSample := time.Time{}
 	count := 0
@@ -1186,7 +1245,7 @@ func (e *Endpoint) collectChunk(ctx context.Context, pqs queryChunk, res *resour
 				e.log.Errorf("MOID %s not found in cache. Skipping", moid)
 				continue
 			}
-			e.populateTags(objectRef, resourceType, res, t, &v)
+			e.populateTags(objectRef, resourceType, res, t, v)
 
 			nValues := 0
 			alignedInfo, alignedValues := e.alignSamples(em.SampleInfo, v.Value, interval)
@@ -1231,7 +1290,8 @@ func (e *Endpoint) collectChunk(ctx context.Context, pqs queryChunk, res *resour
 				count++
 
 				// Update hiwater marks
-				e.hwMarks.Put(moid, name, ts)
+				adjTs := ts.Add(interval).Truncate(interval).Add(-time.Second)
+				e.hwMarks.Put(moid, name, adjTs)
 			}
 			if nValues == 0 {
 				e.log.Debugf("Missing value for: %s, %s", name, objectRef.name)
@@ -1247,7 +1307,7 @@ func (e *Endpoint) collectChunk(ctx context.Context, pqs queryChunk, res *resour
 	return count, latestSample, nil
 }
 
-func (e *Endpoint) populateTags(objectRef *objectRef, resourceType string, resource *resourceKind, t map[string]string, v *performance.MetricSeries) {
+func (e *Endpoint) populateTags(objectRef *objectRef, resourceType string, resource *resourceKind, t map[string]string, v performance.MetricSeries) {
 	// Map name of object.
 	if resource.pKey != "" {
 		t[resource.pKey] = objectRef.name

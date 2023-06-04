@@ -7,9 +7,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/influxdata/telegraf/config"
 	"github.com/influxdata/toml"
 	"github.com/influxdata/toml/ast"
+
+	"github.com/influxdata/telegraf/config"
 )
 
 type pluginState map[string]bool
@@ -51,7 +52,7 @@ func ImportConfigurations(files, dirs []string) (*selection, int, error) {
 	return &sel, len(filenames), err
 }
 
-func (s *selection) Filter(p packageCollection) (*packageCollection, error) {
+func (s *selection) Filter(p packageCollection) *packageCollection {
 	enabled := packageCollection{
 		packages: map[string][]packageInfo{},
 	}
@@ -67,9 +68,10 @@ func (s *selection) Filter(p packageCollection) (*packageCollection, error) {
 		enabled.packages[category] = categoryEnabledPackages
 	}
 
-	// Make sure we update the list of default parsers used by
+	// Make sure we update the list of default parsers and serializers used by
 	// the remaining packages
 	enabled.FillDefaultParsers()
+	enabled.FillDefaultSerializers()
 
 	// If the user did not configure any parser, we want to include
 	// the default parsers if any to preserve a functional set of
@@ -87,18 +89,33 @@ func (s *selection) Filter(p packageCollection) (*packageCollection, error) {
 		enabled.packages["parsers"] = parsers
 	}
 
-	return &enabled, nil
+	// If the user did not configure any serializer, we want to include
+	// the default one if any to preserve a functional set of plugins.
+	if len(enabled.packages["serializers"]) == 0 && len(enabled.defaultSerializers) > 0 {
+		var serializers []packageInfo
+		for _, pkg := range p.packages["serializers"] {
+			for _, name := range enabled.defaultSerializers {
+				if pkg.Plugin == name {
+					serializers = append(serializers, pkg)
+					break
+				}
+			}
+		}
+		enabled.packages["serializers"] = serializers
+	}
+
+	return &enabled
 }
 
 func (s *selection) importFiles(configurations []string) error {
 	for _, cfg := range configurations {
 		buf, err := config.LoadConfigFile(cfg)
 		if err != nil {
-			return fmt.Errorf("reading %q failed: %v", cfg, err)
+			return fmt.Errorf("reading %q failed: %w", cfg, err)
 		}
 
 		if err := s.extractPluginsFromConfig(buf); err != nil {
-			return fmt.Errorf("extracting plugins from %q failed: %v", cfg, err)
+			return fmt.Errorf("extracting plugins from %q failed: %w", cfg, err)
 		}
 	}
 

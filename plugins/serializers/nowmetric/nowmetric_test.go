@@ -22,11 +22,16 @@ func TestSerializeMetricFloat(t *testing.T) {
 	}
 	m := metric.New("cpu", tags, fields, now)
 
-	s, _ := NewSerializer()
+	s := &Serializer{}
 	var buf []byte
 	buf, err := s.Serialize(m)
 	require.NoError(t, err)
-	expS := []byte(fmt.Sprintf(`[{"metric_type":"usage_idle","resource":"","node":"","value":91.5,"timestamp":%d,"ci2metric_id":null,"source":"Telegraf"}]`, now.UnixNano()/int64(time.Millisecond)))
+	expS := []byte(
+		fmt.Sprintf(
+			`[{"metric_type":"usage_idle","resource":"","node":"","value":91.5,"timestamp":%d,"ci2metric_id":null,"source":"Telegraf"}]`,
+			now.UnixNano()/int64(time.Millisecond),
+		),
+	)
 	require.Equal(t, string(expS), string(buf))
 }
 
@@ -67,7 +72,7 @@ func TestSerialize_TimestampUnits(t *testing.T) {
 				},
 				time.Unix(1525478795, 123456789),
 			)
-			s, _ := NewSerializer()
+			s := &Serializer{}
 			actual, err := s.Serialize(m)
 			require.NoError(t, err)
 			require.Equal(t, tt.expected, string(actual))
@@ -85,12 +90,17 @@ func TestSerializeMetricInt(t *testing.T) {
 	}
 	m := metric.New("cpu", tags, fields, now)
 
-	s, _ := NewSerializer()
+	s := &Serializer{}
 	var buf []byte
 	buf, err := s.Serialize(m)
 	require.NoError(t, err)
 
-	expS := []byte(fmt.Sprintf(`[{"metric_type":"usage_idle","resource":"","node":"","value":90,"timestamp":%d,"ci2metric_id":null,"source":"Telegraf"}]`, now.UnixNano()/int64(time.Millisecond)))
+	expS := []byte(
+		fmt.Sprintf(
+			`[{"metric_type":"usage_idle","resource":"","node":"","value":90,"timestamp":%d,"ci2metric_id":null,"source":"Telegraf"}]`,
+			now.UnixNano()/int64(time.Millisecond),
+		),
+	)
 	require.Equal(t, string(expS), string(buf))
 }
 
@@ -104,7 +114,7 @@ func TestSerializeMetricString(t *testing.T) {
 	}
 	m := metric.New("cpu", tags, fields, now)
 
-	s, _ := NewSerializer()
+	s := &Serializer{}
 	var buf []byte
 	buf, err := s.Serialize(m)
 	require.NoError(t, err)
@@ -128,12 +138,19 @@ func TestSerializeMultiFields(t *testing.T) {
 		return m.FieldList()[i].Key < m.FieldList()[j].Key
 	})
 
-	s, _ := NewSerializer()
+	s := &Serializer{}
 	var buf []byte
 	buf, err := s.Serialize(m)
 	require.NoError(t, err)
 
-	expS := []byte(fmt.Sprintf(`[{"metric_type":"usage_idle","resource":"","node":"","value":90,"timestamp":%d,"ci2metric_id":null,"source":"Telegraf"},{"metric_type":"usage_total","resource":"","node":"","value":8559615,"timestamp":%d,"ci2metric_id":null,"source":"Telegraf"}]`, now.UnixNano()/int64(time.Millisecond), now.UnixNano()/int64(time.Millisecond)))
+	expS := []byte(
+		fmt.Sprintf(
+			`[{"metric_type":"usage_idle","resource":"","node":"","value":90,"timestamp":%d,"ci2metric_id":null,"source":"Telegraf"},`+
+				`{"metric_type":"usage_total","resource":"","node":"","value":8559615,"timestamp":%d,"ci2metric_id":null,"source":"Telegraf"}]`,
+			now.UnixNano()/int64(time.Millisecond),
+			now.UnixNano()/int64(time.Millisecond),
+		),
+	)
 	require.Equal(t, string(expS), string(buf))
 }
 
@@ -147,11 +164,16 @@ func TestSerializeMetricWithEscapes(t *testing.T) {
 	}
 	m := metric.New("My CPU", tags, fields, now)
 
-	s, _ := NewSerializer()
+	s := &Serializer{}
 	buf, err := s.Serialize(m)
 	require.NoError(t, err)
 
-	expS := []byte(fmt.Sprintf(`[{"metric_type":"U,age=Idle","resource":"","node":"","value":90,"timestamp":%d,"ci2metric_id":null,"source":"Telegraf"}]`, now.UnixNano()/int64(time.Millisecond)))
+	expS := []byte(
+		fmt.Sprintf(
+			`[{"metric_type":"U,age=Idle","resource":"","node":"","value":90,"timestamp":%d,"ci2metric_id":null,"source":"Telegraf"}]`,
+			now.UnixNano()/int64(time.Millisecond),
+		),
+	)
 	require.Equal(t, string(expS), string(buf))
 }
 
@@ -165,8 +187,15 @@ func TestSerializeBatch(t *testing.T) {
 		time.Unix(0, 0),
 	)
 	metrics := []telegraf.Metric{m, m}
-	s, _ := NewSerializer()
+	s := &Serializer{}
 	buf, err := s.SerializeBatch(metrics)
 	require.NoError(t, err)
-	require.Equal(t, []byte(`[{"metric_type":"value","resource":"","node":"","value":42,"timestamp":0,"ci2metric_id":null,"source":"Telegraf"},{"metric_type":"value","resource":"","node":"","value":42,"timestamp":0,"ci2metric_id":null,"source":"Telegraf"}]`), buf)
+	require.Equal(
+		t,
+		[]byte(
+			`[{"metric_type":"value","resource":"","node":"","value":42,"timestamp":0,"ci2metric_id":null,"source":"Telegraf"},`+
+				`{"metric_type":"value","resource":"","node":"","value":42,"timestamp":0,"ci2metric_id":null,"source":"Telegraf"}]`,
+		),
+		buf,
+	)
 }

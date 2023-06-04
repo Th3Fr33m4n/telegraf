@@ -13,6 +13,7 @@ import (
 	"github.com/vjeantet/grok"
 
 	"github.com/influxdata/telegraf"
+	"github.com/influxdata/telegraf/internal"
 	"github.com/influxdata/telegraf/metric"
 	"github.com/influxdata/telegraf/plugins/parsers"
 )
@@ -75,6 +76,7 @@ type Parser struct {
 	NamedPatterns      []string          `toml:"grok_named_patterns"`
 	CustomPatterns     string            `toml:"grok_custom_patterns"`
 	CustomPatternFiles []string          `toml:"grok_custom_pattern_files"`
+	Multiline          bool              `toml:"grok_multiline"`
 	Measurement        string            `toml:"-"`
 	DefaultTags        map[string]string `toml:"-"`
 	Log                telegraf.Logger   `toml:"-"`
@@ -316,7 +318,7 @@ func (p *Parser) ParseLine(line string) (telegraf.Metric, error) {
 				timestamp = time.Unix(0, iv)
 			}
 		case SyslogTimestamp:
-			ts, err := time.ParseInLocation(time.Stamp, v, p.loc)
+			ts, err := internal.ParseTimestamp(time.Stamp, v, p.loc)
 			if err == nil {
 				if ts.Year() == 0 {
 					ts = ts.AddDate(timestamp.Year(), 0, 0)
@@ -329,7 +331,7 @@ func (p *Parser) ParseLine(line string) (telegraf.Metric, error) {
 			var foundTs bool
 			// first try timestamp layouts that we've already found
 			for _, layout := range p.foundTsLayouts {
-				ts, err := time.ParseInLocation(layout, v, p.loc)
+				ts, err := internal.ParseTimestamp(layout, v, p.loc)
 				if err == nil {
 					timestamp = ts
 					foundTs = true
@@ -340,7 +342,7 @@ func (p *Parser) ParseLine(line string) (telegraf.Metric, error) {
 			// layouts.
 			if !foundTs {
 				for _, layout := range timeLayouts {
-					ts, err := time.ParseInLocation(layout, v, p.loc)
+					ts, err := internal.ParseTimestamp(layout, v, p.loc)
 					if err == nil {
 						timestamp = ts
 						foundTs = true
@@ -359,7 +361,7 @@ func (p *Parser) ParseLine(line string) (telegraf.Metric, error) {
 		// goodbye!
 		default:
 			v = strings.ReplaceAll(v, ",", ".")
-			ts, err := time.ParseInLocation(t, v, p.loc)
+			ts, err := internal.ParseTimestamp(t, v, p.loc)
 			if err == nil {
 				if ts.Year() == 0 {
 					ts = ts.AddDate(timestamp.Year(), 0, 0)
@@ -380,6 +382,17 @@ func (p *Parser) ParseLine(line string) (telegraf.Metric, error) {
 
 func (p *Parser) Parse(buf []byte) ([]telegraf.Metric, error) {
 	metrics := make([]telegraf.Metric, 0)
+
+	if p.Multiline {
+		m, err := p.ParseLine(string(buf))
+		if err != nil {
+			return nil, err
+		}
+		if m != nil {
+			metrics = append(metrics, m)
+		}
+		return metrics, nil
+	}
 
 	scanner := bufio.NewScanner(bytes.NewReader(buf))
 	for scanner.Scan() {
@@ -560,20 +573,6 @@ func (t *tsModder) tsMod(ts time.Time) time.Time {
 		}
 	}
 	return ts.Add(t.incr*t.incrn + t.rollover)
-}
-
-// InitFromConfig is a compatibility function to construct the parser the old way
-func (p *Parser) InitFromConfig(config *parsers.Config) error {
-	p.Measurement = config.MetricName
-	p.DefaultTags = config.DefaultTags
-	p.CustomPatterns = config.GrokCustomPatterns
-	p.CustomPatternFiles = config.GrokCustomPatternFiles
-	p.NamedPatterns = config.GrokNamedPatterns
-	p.Patterns = config.GrokPatterns
-	p.Timezone = config.GrokTimezone
-	p.UniqueTimestamp = config.GrokUniqueTimestamp
-
-	return p.Init()
 }
 
 func (p *Parser) Init() error {

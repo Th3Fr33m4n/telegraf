@@ -3,6 +3,15 @@
 This output plugin writes metrics to PostgreSQL (or compatible database).
 The plugin manages the schema, automatically updating missing columns.
 
+## Global configuration options <!-- @/docs/includes/plugin_config.md -->
+
+In addition to the plugin-specific configuration settings, plugins support
+additional global and plugin configuration settings. These settings are used to
+modify metrics, tags, and field or create aliases and configure ordering, etc.
+See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
+
+[CONFIGURATION.md]: ../../../docs/CONFIGURATION.md#plugins
+
 ## Configuration
 
 ```toml @sample.conf
@@ -147,7 +156,7 @@ statements. This allows for complete control of the schema by the user.
 
 Documentation on how to write templates can be found [sqltemplate docs][1]
 
-[1]: https://pkg.go.dev/github.com/influxdb/telegraf/plugins/outputs/postgresql/sqltemplate
+[1]: https://pkg.go.dev/github.com/influxdata/telegraf/plugins/outputs/postgresql/sqltemplate
 
 ### Samples
 
@@ -157,7 +166,7 @@ Documentation on how to write templates can be found [sqltemplate docs][1]
 tags_as_foreign_keys = true
 create_templates = [
     '''CREATE TABLE {{ .table }} ({{ .columns }})''',
-    '''SELECT create_hypertable({{ .table|quoteLiteral }}, 'time', chunk_time_interval => INTERVAL '1h')''',
+    '''SELECT create_hypertable({{ .table|quoteLiteral }}, 'time', chunk_time_interval => INTERVAL '7d')''',
     '''ALTER TABLE {{ .table }} SET (timescaledb.compress, timescaledb.compress_segmentby = 'tag_id')''',
 ]
 ```
@@ -168,7 +177,7 @@ create_templates = [
 tags_as_foreign_keys = true
 create_templates = [
     '''CREATE TABLE {{ .table }} ({{ .columns }})''',
-    '''SELECT create_distributed_hypertable({{ .table|quoteLiteral }}, 'time', partitioning_column => 'tag_id', number_partitions => (SELECT count(*) FROM timescaledb_information.data_nodes)::integer, replication_factor => 2, chunk_time_interval => INTERVAL '1h')''',
+    '''SELECT create_distributed_hypertable({{ .table|quoteLiteral }}, 'time', partitioning_column => 'tag_id', number_partitions => (SELECT count(*) FROM timescaledb_information.data_nodes)::integer, replication_factor => 2, chunk_time_interval => INTERVAL '7d')''',
     '''ALTER TABLE {{ .table }} SET (timescaledb.compress, timescaledb.compress_segmentby = 'tag_id')''',
 ]
 ```
@@ -188,12 +197,12 @@ create_templates = [
 ]
 add_column_templates = [
     '''ALTER TABLE {{ .table }} ADD COLUMN IF NOT EXISTS {{ .columns|join ", ADD COLUMN IF NOT EXISTS " }}''',
-    '''DROP VIEW {{ .table.WithSchema "public" }} IF EXISTS''',
+    '''DROP VIEW IF EXISTS {{ .table.WithSchema "public" }}''',
     '''CREATE VIEW {{ .table.WithSchema "public" }} AS SELECT time, {{ (.tagTable.Columns.Tags.Concat .allColumns.Fields).Identifiers | join "," }} FROM {{ .table }} t, {{ .tagTable }} tt WHERE t.tag_id = tt.tag_id''',
 ]
 tag_table_add_column_templates = [
     '''ALTER TABLE {{.table}} ADD COLUMN IF NOT EXISTS {{.columns|join ", ADD COLUMN IF NOT EXISTS "}}''',
-    '''DROP VIEW {{ .metricTable.WithSchema "public" }} IF EXISTS''',
+    '''DROP VIEW IF EXISTS {{ .metricTable.WithSchema "public" }}''',
     '''CREATE VIEW {{ .metricTable.WithSchema "public" }} AS SELECT time, {{ (.allColumns.Tags.Concat .metricTable.Columns.Fields).Identifiers | join "," }} FROM {{ .metricTable }} t, {{ .tagTable }} tt WHERE t.tag_id = tt.tag_id''',
 ]
 ```
@@ -209,9 +218,9 @@ tags_as_foreign_keys = true
 schema = 'telegraf'
 create_templates = [
     '''CREATE TABLE {{ .table }} ({{ .allColumns }})''',
-    '''SELECT create_hypertable({{ .table|quoteLiteral }}, 'time', chunk_time_interval => INTERVAL '1h')''',
+    '''SELECT create_hypertable({{ .table|quoteLiteral }}, 'time', chunk_time_interval => INTERVAL '7d')''',
     '''ALTER TABLE {{ .table }} SET (timescaledb.compress, timescaledb.compress_segmentby = 'tag_id')''',
-    '''SELECT add_compression_policy({{ .table|quoteLiteral }}, INTERVAL '2h')''',
+    '''SELECT add_compression_policy({{ .table|quoteLiteral }}, INTERVAL '14d')''',
     '''CREATE VIEW {{ .table.WithSuffix "_data" }} AS SELECT {{ .allColumns.Selectors | join "," }} FROM {{ .table }}''',
     '''CREATE VIEW {{ .table.WithSchema "public" }} AS SELECT time, {{ (.tagTable.Columns.Tags.Concat .allColumns.Fields).Identifiers | join "," }} FROM {{ .table.WithSuffix "_data" }} t, {{ .tagTable }} tt WHERE t.tag_id = tt.tag_id''',
 ]
@@ -221,9 +230,9 @@ add_column_templates = [
     '''DROP VIEW {{ .table.WithSchema "public" }}''',
 
     '''CREATE TABLE {{ .table }} ({{ .allColumns }})''',
-    '''SELECT create_hypertable({{ .table|quoteLiteral }}, 'time', chunk_time_interval => INTERVAL '1h')''',
+    '''SELECT create_hypertable({{ .table|quoteLiteral }}, 'time', chunk_time_interval => INTERVAL '7d')''',
     '''ALTER TABLE {{ .table }} SET (timescaledb.compress, timescaledb.compress_segmentby = 'tag_id')''',
-    '''SELECT add_compression_policy({{ .table|quoteLiteral }}, INTERVAL '2h')''',
+    '''SELECT add_compression_policy({{ .table|quoteLiteral }}, INTERVAL '14d')''',
     '''CREATE VIEW {{ .table.WithSuffix "_data" }} AS SELECT {{ .allColumns.Selectors | join "," }} FROM {{ .table }} UNION ALL SELECT {{ (.allColumns.Union .table.Columns).Selectors | join "," }} FROM {{ .table.WithSuffix "_" .table.Columns.Hash "_data" }}''',
     '''CREATE VIEW {{ .table.WithSchema "public" }} AS SELECT time, {{ (.tagTable.Columns.Tags.Concat .allColumns.Fields).Identifiers | join "," }} FROM {{ .table.WithSuffix "_data" }} t, {{ .tagTable }} tt WHERE t.tag_id = tt.tag_id''',
 ]

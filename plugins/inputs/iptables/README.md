@@ -63,10 +63,20 @@ status 4" messages in telegraf.log and missing metrics. Setting 'use_lock =
 true' in the plugin configuration will run IPtables with the '-w' switch,
 allowing a lock usage to prevent this error.
 
+## Global configuration options <!-- @/docs/includes/plugin_config.md -->
+
+In addition to the plugin-specific configuration settings, plugins support
+additional global and plugin configuration settings. These settings are used to
+modify metrics, tags, and field or create aliases and configure ordering, etc.
+See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
+
+[CONFIGURATION.md]: ../../../docs/CONFIGURATION.md#plugins
+
 ## Configuration
 
 ```toml @sample.conf
 # Gather packets and bytes throughput from iptables
+# This plugin ONLY supports Linux
 [[inputs.iptables]]
   ## iptables require root access on most systems.
   ## Setting 'use_sudo' to true will make use of sudo to run iptables.
@@ -88,13 +98,15 @@ allowing a lock usage to prevent this error.
   chains = [ "INPUT" ]
 ```
 
-## Measurements & Fields
+## Metrics
+
+### Measurements & Fields
 
 * iptables
   * pkts (integer, count)
   * bytes (integer, bytes)
 
-## Tags
+### Tags
 
 * All measurements have the following tags:
   * table
@@ -105,16 +117,18 @@ The `ruleid` is the comment associated to the rule.
 
 ## Example Output
 
+```shell
+iptables -nvL INPUT
+```
+
 ```text
-$ iptables -nvL INPUT
 Chain INPUT (policy DROP 0 packets, 0 bytes)
 pkts bytes target     prot opt in     out     source               destination
 100   1024   ACCEPT     tcp  --  *      *       192.168.0.0/24       0.0.0.0/0            tcp dpt:22 /* ssh */
  42   2048   ACCEPT     tcp  --  *      *       192.168.0.0/24       0.0.0.0/0            tcp dpt:80 /* httpd */
 ```
 
-```shell
-$ ./telegraf --config telegraf.conf --input-filter iptables --test
+```text
 iptables,table=filter,chain=INPUT,ruleid=ssh pkts=100i,bytes=1024i 1453831884664956455
 iptables,table=filter,chain=INPUT,ruleid=httpd pkts=42i,bytes=2048i 1453831884664956455
 ```

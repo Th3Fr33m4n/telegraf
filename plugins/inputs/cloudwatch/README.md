@@ -15,6 +15,15 @@ API endpoint. In the following order the plugin will attempt to authenticate.
 5. [Shared Credentials][credentials]
 6. [EC2 Instance Profile][iam-roles]
 
+## Global configuration options <!-- @/docs/includes/plugin_config.md -->
+
+In addition to the plugin-specific configuration settings, plugins support
+additional global and plugin configuration settings. These settings are used to
+modify metrics, tags, and field or create aliases and configure ordering, etc.
+See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
+
+[CONFIGURATION.md]: ../../../docs/CONFIGURATION.md#plugins
+
 ## Configuration
 
 ```toml @sample.conf
@@ -41,7 +50,12 @@ API endpoint. In the following order the plugin will attempt to authenticate.
   # role_session_name = ""
   # profile = ""
   # shared_credential_file = ""
-
+  
+  ## If you are using CloudWatch cross-account observability, you can 
+  ## set IncludeLinkedAccounts to true in a monitoring account 
+  ## and collect metrics from the linked source accounts
+  # include_linked_accounts = false
+  
   ## Endpoint to make request against, the correct endpoint is automatically
   ## determined and this option should only be set if you wish to override the
   ## default.
@@ -87,8 +101,6 @@ API endpoint. In the following order the plugin will attempt to authenticate.
 
   ## Metric Statistic Namespaces (required)
   namespaces = ["AWS/ELB"]
-  ## Single metric statistic namespace appended to namespaces on startup
-  # namespace = "AWS/ELB"
 
   ## Maximum requests per second. Note that the global default AWS rate limit
   ## is 50 reqs/sec, so if you define multiple namespaces, these should add up
@@ -130,21 +142,24 @@ API endpoint. In the following order the plugin will attempt to authenticate.
   #    value = "p-example"
 ```
 
+Please note, the `namespace` option is deprecated in favor of the `namespaces`
+list option.
+
 ## Requirements and Terminology
 
-Plugin Configuration utilizes [CloudWatch concepts][concept] and access pattern to
-allow monitoring of any CloudWatch Metric.
+Plugin Configuration utilizes [CloudWatch concepts][concept] and access
+pattern to allow monitoring of any CloudWatch Metric.
 
 - `region` must be a valid AWS [region][] value
 - `period` must be a valid CloudWatch [period][] value
-- `namespace` must be a valid CloudWatch [namespace][] value
+- `namespaces` must be a list of valid CloudWatch [namespace][] value(s)
 - `names` must be valid CloudWatch [metric][] names
 - `dimensions` must be valid CloudWatch [dimension][] name/value pairs
 
 Omitting or specifying a value of `'*'` for a dimension value configures all
 available metrics that contain a dimension with the specified name to be
 retrieved. If specifying >1 dimension, then the metric must contain *all* the
-configured dimensions where the the value of the wildcard dimension is ignored.
+configured dimensions where the value of the wildcard dimension is ignored.
 
 Example:
 
@@ -216,6 +231,8 @@ case](https://en.wikipedia.org/wiki/Snake_case)
 - All measurements have the following tags:
   - region           (CloudWatch Region)
   - {dimension-name} (Cloudwatch Dimension value - one per metric dimension)
+- If `include_linked_accounts` is set to true then below tag is also provided:
+  - account           (The ID of the account where the metrics are located.)
 
 ## Troubleshooting
 
@@ -257,9 +274,8 @@ aws cloudwatch get-metric-data \
 
 ## Example Output
 
-```shell
-$ ./telegraf --config telegraf.conf --input-filter cloudwatch --test
-> cloudwatch_aws_elb,load_balancer_name=p-example,region=us-east-1 latency_average=0.004810798017284538,latency_maximum=0.1100282669067383,latency_minimum=0.0006084442138671875,latency_sample_count=4029,latency_sum=19.382705211639404 1459542420000000000
+```text
+cloudwatch_aws_elb,load_balancer_name=p-example,region=us-east-1 latency_average=0.004810798017284538,latency_maximum=0.1100282669067383,latency_minimum=0.0006084442138671875,latency_sample_count=4029,latency_sum=19.382705211639404 1459542420000000000
 ```
 
 [concept]: http://docs.aws.amazon.com/AmazonCloudWatch/latest/DeveloperGuide/cloudwatch_concepts.html

@@ -4,6 +4,15 @@ Couchbase is a distributed NoSQL database.  This plugin gets metrics for each
 Couchbase node, as well as detailed metrics for each bucket, for a given
 couchbase server.
 
+## Global configuration options <!-- @/docs/includes/plugin_config.md -->
+
+In addition to the plugin-specific configuration settings, plugins support
+additional global and plugin configuration settings. These settings are used to
+modify metrics, tags, and field or create aliases and configure ordering, etc.
+See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
+
+[CONFIGURATION.md]: ../../../docs/CONFIGURATION.md#plugins
+
 ## Configuration
 
 ```toml @sample.conf
@@ -297,7 +306,7 @@ option:
 
 ## Example Output
 
-```shell
+```text
 couchbase_node,cluster=http://localhost:8091/,hostname=172.17.0.2:8091 memory_free=7705575424,memory_total=16558182400 1547829754000000000
 couchbase_bucket,bucket=beer-sample,cluster=http://localhost:8091/ quota_percent_used=27.09285736083984,ops_per_sec=0,disk_fetches=0,item_count=7303,disk_used=21662946,data_used=9325087,mem_used=28408920 1547829754000000000
 ```

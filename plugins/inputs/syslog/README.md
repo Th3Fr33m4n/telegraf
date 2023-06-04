@@ -7,7 +7,28 @@ socket, [UDP](https://tools.ietf.org/html/rfc5426),
 framing.
 
 Syslog messages should be formatted according to
-[RFC 5424](https://tools.ietf.org/html/rfc5424).
+[RFC 5424](https://tools.ietf.org/html/rfc5424) (syslog protocol) or
+[RFC 3164](https://tools.ietf.org/html/rfc3164) (BSD syslog protocol).
+
+## Service Input <!-- @/docs/includes/service_input.md -->
+
+This plugin is a service input. Normal plugins gather metrics determined by the
+interval setting. Service plugins start a service to listens and waits for
+metrics or events to occur. Service plugins have two key differences from
+normal plugins:
+
+1. The global or plugin specific `interval` setting may not apply
+2. The CLI options of `--test`, `--test-wait`, and `--once` may not produce
+   output for this plugin
+
+## Global configuration options <!-- @/docs/includes/plugin_config.md -->
+
+In addition to the plugin-specific configuration settings, plugins support
+additional global and plugin configuration settings. These settings are used to
+modify metrics, tags, and field or create aliases and configure ordering, etc.
+See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
+
+[CONFIGURATION.md]: ../../../docs/CONFIGURATION.md#plugins
 
 ## Configuration
 
@@ -19,6 +40,9 @@ Syslog messages should be formatted according to
   ##   ex: server = "tcp://localhost:6514"
   ##       server = "udp://:6514"
   ##       server = "unix:///var/run/telegraf-syslog.sock"
+  ## When using tcp, consider using 'tcp4' or 'tcp6' to force the usage of IPv4
+  ## or IPV6 respectively. There are cases, where when not specified, a system
+  ## may force an IPv4 mapped IPv6 address.
   server = "tcp://:6514"
 
   ## TLS Config
@@ -213,7 +237,7 @@ to port 514.
 
 Here is example output of this plugin:
 
-```shell
+```text
 syslog,appname=docker-compose,facility=daemon,host=bb8,hostname=droplet,location=home,severity=info,source=10.0.0.12 facility_code=3i,message="<redacted>",severity_code=6i,timestamp=1624643706396113000i,version=1i 1624643706400667198
 syslog,appname=tailscaled,facility=daemon,host=bb8,hostname=dev,location=home,severity=info,source=10.0.0.15 facility_code=3i,message="<redacted>",severity_code=6i,timestamp=1624643706403394000i,version=1i 1624643706407850408
 syslog,appname=docker-compose,facility=daemon,host=bb8,hostname=droplet,location=home,severity=info,source=10.0.0.12 facility_code=3i,message="<redacted>",severity_code=6i,timestamp=1624643706675853000i,version=1i 1624643706679251683

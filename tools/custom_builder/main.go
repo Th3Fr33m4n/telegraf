@@ -18,6 +18,8 @@ var categories = []string{
 	"outputs",
 	"parsers",
 	"processors",
+	"secretstores",
+	"serializers",
 }
 
 const description = `
@@ -113,10 +115,7 @@ func main() {
 
 	// Process the plugin list with the given config. This will
 	// only keep the plugins that adhere to the filtering criteria.
-	enabled, err := cfg.Filter(packages)
-	if err != nil {
-		log.Fatalf("Filtering plugins failed: %v", err)
-	}
+	enabled := cfg.Filter(packages)
 	if !quiet {
 		enabled.Print()
 	}

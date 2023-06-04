@@ -7,6 +7,15 @@ fake stock data, sine waves, and step-wise values.
 Additionally, users can set the measurement name and tags used to whatever is
 required to mock their situation.
 
+## Global configuration options <!-- @/docs/includes/plugin_config.md -->
+
+In addition to the plugin-specific configuration settings, plugins support
+additional global and plugin configuration settings. These settings are used to
+modify metrics, tags, and field or create aliases and configure ordering, etc.
+See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
+
+[CONFIGURATION.md]: ../../../docs/CONFIGURATION.md#plugins
+
 ## Configuration
 
 ```toml @sample.conf
@@ -58,12 +67,16 @@ The available algorithms for generating mock data include:
 * Step - always add the step value, negative values accepted
 * Stock - generate fake, stock-like price values based on a volatility variable
 
+## Metrics
+
+Metrics are entirely based on the user's own configuration and settings.
+
 ## Example Output
 
 The following example shows all available algorithms configured with an
 additional two tags as well:
 
-```s
+```text
 mock_sensors,building=5A,site=FTC random=4.875966794516125,abc=50,wave=0,plus_one=0 1632170840000000000
 mock_sensors,building=5A,site=FTC random=5.738651873834452,abc=45.095549448434774,wave=5.877852522924732,plus_one=1 1632170850000000000
 mock_sensors,building=5A,site=FTC random=1.0429328917205203,abc=51.928560083072924,wave=9.510565162951535,plus_one=2 1632170860000000000

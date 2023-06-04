@@ -8,31 +8,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const maxDecompressionSize = 1024
+
 func TestGzipEncodeDecode(t *testing.T) {
-	enc, err := NewGzipEncoder()
-	require.NoError(t, err)
-	dec, err := NewGzipDecoder()
-	require.NoError(t, err)
+	enc := NewGzipEncoder()
+	dec := NewGzipDecoder()
 
 	payload, err := enc.Encode([]byte("howdy"))
 	require.NoError(t, err)
 
-	actual, err := dec.Decode(payload)
+	actual, err := dec.Decode(payload, maxDecompressionSize)
 	require.NoError(t, err)
 
 	require.Equal(t, "howdy", string(actual))
 }
 
 func TestGzipReuse(t *testing.T) {
-	enc, err := NewGzipEncoder()
-	require.NoError(t, err)
-	dec, err := NewGzipDecoder()
-	require.NoError(t, err)
+	enc := NewGzipEncoder()
+	dec := NewGzipDecoder()
 
 	payload, err := enc.Encode([]byte("howdy"))
 	require.NoError(t, err)
 
-	actual, err := dec.Decode(payload)
+	actual, err := dec.Decode(payload, maxDecompressionSize)
 	require.NoError(t, err)
 
 	require.Equal(t, "howdy", string(actual))
@@ -40,25 +38,34 @@ func TestGzipReuse(t *testing.T) {
 	payload, err = enc.Encode([]byte("doody"))
 	require.NoError(t, err)
 
-	actual, err = dec.Decode(payload)
+	actual, err = dec.Decode(payload, maxDecompressionSize)
 	require.NoError(t, err)
 
 	require.Equal(t, "doody", string(actual))
 }
 
 func TestZlibEncodeDecode(t *testing.T) {
-	enc, err := NewZlibEncoder()
-	require.NoError(t, err)
-	dec, err := NewZlibDecoder()
-	require.NoError(t, err)
+	enc := NewZlibEncoder()
+	dec := NewZlibDecoder()
 
 	payload, err := enc.Encode([]byte("howdy"))
 	require.NoError(t, err)
 
-	actual, err := dec.Decode(payload)
+	actual, err := dec.Decode(payload, maxDecompressionSize)
 	require.NoError(t, err)
 
 	require.Equal(t, "howdy", string(actual))
+}
+
+func TestZlibEncodeDecodeWithTooLargeMessage(t *testing.T) {
+	enc := NewZlibEncoder()
+	dec := NewZlibDecoder()
+
+	payload, err := enc.Encode([]byte("howdy"))
+	require.NoError(t, err)
+
+	_, err = dec.Decode(payload, 3)
+	require.ErrorContains(t, err, "size of decoded data exceeds allowed size 3")
 }
 
 func TestIdentityEncodeDecode(t *testing.T) {
@@ -68,7 +75,7 @@ func TestIdentityEncodeDecode(t *testing.T) {
 	payload, err := enc.Encode([]byte("howdy"))
 	require.NoError(t, err)
 
-	actual, err := dec.Decode(payload)
+	actual, err := dec.Decode(payload, maxDecompressionSize)
 	require.NoError(t, err)
 
 	require.Equal(t, "howdy", string(actual))
@@ -90,8 +97,7 @@ func TestStreamIdentityDecode(t *testing.T) {
 }
 
 func TestStreamGzipDecode(t *testing.T) {
-	enc, err := NewGzipEncoder()
-	require.NoError(t, err)
+	enc := NewGzipEncoder()
 	written, err := enc.Encode([]byte("howdy"))
 	require.NoError(t, err)
 

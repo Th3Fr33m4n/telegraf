@@ -5,6 +5,15 @@ Gather repository information from [GitHub][] hosted repositories.
 **Note:** Telegraf also contains the [webhook][] input which can be used as an
 alternative method for collecting repository information.
 
+## Global configuration options <!-- @/docs/includes/plugin_config.md -->
+
+In addition to the plugin-specific configuration settings, plugins support
+additional global and plugin configuration settings. These settings are used to
+modify metrics, tags, and field or create aliases and configure ordering, etc.
+See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
+
+[CONFIGURATION.md]: ../../../docs/CONFIGURATION.md#plugins
+
 ## Configuration
 
 ```toml @sample.conf
@@ -74,7 +83,7 @@ options with the required API-calls and the resulting fields
 
 ## Example Output
 
-```shell
+```text
 github_repository,language=Go,license=MIT\ License,name=telegraf,owner=influxdata forks=2679i,networks=2679i,open_issues=794i,size=23263i,stars=7091i,subscribers=316i,watchers=7091i 1563901372000000000
 internal_github,access_token=Unauthenticated closed_pull_requests=3522i,rate_limit_remaining=59i,rate_limit_limit=60i,rate_limit_blocks=0i,open_pull_requests=260i 1552653551000000000
 ```

@@ -83,43 +83,33 @@ func (p *Procstat) Gather(acc telegraf.Accumulator) error {
 	pidCount := 0
 	now := time.Now()
 	newProcs := make(map[PID]Process, len(p.procs))
+	tags := make(map[string]string)
 	pidTags := p.findPids()
 	for _, pidTag := range pidTags {
 		pids := pidTag.PIDS
-		tags := pidTag.Tags
 		err := pidTag.Err
 		pidCount += len(pids)
+		for key, value := range pidTag.Tags {
+			tags[key] = value
+		}
 		if err != nil {
 			fields := map[string]interface{}{
 				"pid_count":   0,
 				"running":     0,
 				"result_code": 1,
 			}
-			tags := map[string]string{
-				"pid_finder": p.PidFinder,
-				"result":     "lookup_error",
-			}
+			tags["pid_finder"] = p.PidFinder
+			tags["result"] = "lookup_error"
 			acc.AddFields("procstat_lookup", fields, tags, now)
 			return err
 		}
 
-		err = p.updateProcesses(pids, tags, p.procs, newProcs)
-		if err != nil {
-			acc.AddError(fmt.Errorf("procstat getting process, exe: [%s] pidfile: [%s] pattern: [%s] user: [%s] %s",
-				p.Exe, p.PidFile, p.Pattern, p.User, err.Error()))
-		}
+		p.updateProcesses(pids, pidTag.Tags, p.procs, newProcs)
 	}
 
 	p.procs = newProcs
 	for _, proc := range p.procs {
 		p.addMetric(proc, acc, now)
-	}
-
-	tags := make(map[string]string)
-	for _, pidTag := range pidTags {
-		for key, value := range pidTag.Tags {
-			tags[key] = value
-		}
 	}
 
 	fields := map[string]interface{}{
@@ -298,7 +288,7 @@ func (p *Procstat) addMetric(proc Process, acc telegraf.Accumulator, t time.Time
 }
 
 // Update monitored Processes
-func (p *Procstat) updateProcesses(pids []PID, tags map[string]string, prevInfo map[PID]Process, procs map[PID]Process) error {
+func (p *Procstat) updateProcesses(pids []PID, tags map[string]string, prevInfo map[PID]Process, procs map[PID]Process) {
 	for _, pid := range pids {
 		info, ok := prevInfo[pid]
 		if ok {
@@ -333,7 +323,6 @@ func (p *Procstat) updateProcesses(pids []PID, tags map[string]string, prevInfo 
 			}
 		}
 	}
-	return nil
 }
 
 // Create and return PIDGatherer lazily
@@ -417,14 +406,14 @@ func (p *Procstat) systemdUnitPIDs() []PidsTags {
 }
 
 func (p *Procstat) simpleSystemdUnitPIDs() ([]PID, error) {
-	var pids []PID
-
-	cmd := execCommand("systemctl", "show", p.SystemdUnit)
-	out, err := cmd.Output()
+	out, err := execCommand("systemctl", "show", p.SystemdUnit).Output()
 	if err != nil {
 		return nil, err
 	}
-	for _, line := range bytes.Split(out, []byte{'\n'}) {
+
+	lines := bytes.Split(out, []byte{'\n'})
+	pids := make([]PID, 0, len(lines))
+	for _, line := range lines {
 		kv := bytes.SplitN(line, []byte{'='}, 2)
 		if len(kv) != 2 {
 			continue
@@ -437,7 +426,7 @@ func (p *Procstat) simpleSystemdUnitPIDs() ([]PID, error) {
 		}
 		pid, err := strconv.ParseInt(string(kv[1]), 10, 32)
 		if err != nil {
-			return nil, fmt.Errorf("invalid pid '%s'", kv[1])
+			return nil, fmt.Errorf("invalid pid %q", kv[1])
 		}
 		pids = append(pids, PID(pid))
 	}
@@ -446,17 +435,17 @@ func (p *Procstat) simpleSystemdUnitPIDs() ([]PID, error) {
 }
 
 func (p *Procstat) cgroupPIDs() []PidsTags {
-	var pidTags []PidsTags
-
 	procsPath := p.CGroup
 	if procsPath[0] != '/' {
 		procsPath = "/sys/fs/cgroup/" + procsPath
 	}
+
 	items, err := filepath.Glob(procsPath)
 	if err != nil {
-		pidTags = append(pidTags, PidsTags{nil, nil, fmt.Errorf("glob failed '%s'", err)})
-		return pidTags
+		return []PidsTags{{nil, nil, fmt.Errorf("glob failed: %w", err)}}
 	}
+
+	pidTags := make([]PidsTags, 0, len(items))
 	for _, item := range items {
 		pids, err := p.singleCgroupPIDs(item)
 		tags := map[string]string{"cgroup": p.CGroup, "cgroup_full": item}
@@ -467,8 +456,6 @@ func (p *Procstat) cgroupPIDs() []PidsTags {
 }
 
 func (p *Procstat) singleCgroupPIDs(path string) ([]PID, error) {
-	var pids []PID
-
 	ok, err := isDir(path)
 	if err != nil {
 		return nil, err
@@ -481,13 +468,16 @@ func (p *Procstat) singleCgroupPIDs(path string) ([]PID, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, pidBS := range bytes.Split(out, []byte{'\n'}) {
+
+	lines := bytes.Split(out, []byte{'\n'})
+	pids := make([]PID, 0, len(lines))
+	for _, pidBS := range lines {
 		if len(pidBS) == 0 {
 			continue
 		}
 		pid, err := strconv.ParseInt(string(pidBS), 10, 32)
 		if err != nil {
-			return nil, fmt.Errorf("invalid pid '%s'", pidBS)
+			return nil, fmt.Errorf("invalid pid %q", pidBS)
 		}
 		pids = append(pids, PID(pid))
 	}

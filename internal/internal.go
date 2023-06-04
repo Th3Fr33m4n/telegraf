@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"compress/gzip"
 	"context"
+	cryptoRand "crypto/rand"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math/big"
 	"math/rand"
 	"os"
@@ -23,9 +25,11 @@ import (
 
 const alphanum string = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
+var once sync.Once
+
 var (
-	ErrTimeout          = errors.New("command timed out")
-	ErrorNotImplemented = errors.New("not implemented yet")
+	ErrTimeout        = errors.New("command timed out")
+	ErrNotImplemented = errors.New("not implemented yet")
 )
 
 // Set via LDFLAGS -X
@@ -87,13 +91,16 @@ func ReadLines(filename string) ([]string, error) {
 }
 
 // RandomString returns a random string of alphanumeric characters
-func RandomString(n int) string {
+func RandomString(n int) (string, error) {
 	var bytes = make([]byte, n)
-	rand.Read(bytes) //nolint:revive // from math/rand/rand.go: "It always returns len(p) and a nil error."
+	_, err := cryptoRand.Read(bytes)
+	if err != nil {
+		return "", err
+	}
 	for i, b := range bytes {
 		bytes[i] = alphanum[b%byte(len(alphanum))]
 	}
-	return string(bytes)
+	return string(bytes), nil
 }
 
 // SnakeCase converts the given string to snake case following the Golang format:
@@ -114,16 +121,14 @@ func SnakeCase(in string) string {
 }
 
 // RandomSleep will sleep for a random amount of time up to max.
-// If the shutdown channel is closed, it will return before it has finished
-// sleeping.
+// If the shutdown channel is closed, it will return before it has finished sleeping.
 func RandomSleep(max time.Duration, shutdown chan struct{}) {
-	if max == 0 {
+	sleepDuration := RandomDuration(max)
+	if sleepDuration == 0 {
 		return
 	}
 
-	sleepns := rand.Int63n(max.Nanoseconds())
-
-	t := time.NewTimer(time.Nanosecond * time.Duration(sleepns))
+	t := time.NewTimer(time.Nanosecond * sleepDuration)
 	select {
 	case <-t.C:
 		return
@@ -139,9 +144,7 @@ func RandomDuration(max time.Duration) time.Duration {
 		return 0
 	}
 
-	sleepns := rand.Int63n(max.Nanoseconds())
-
-	return time.Duration(sleepns)
+	return time.Duration(rand.Int63n(max.Nanoseconds())) //nolint:gosec // G404: not security critical
 }
 
 // SleepContext sleeps until the context is closed or the duration is reached.
@@ -180,8 +183,9 @@ func AlignTime(tm time.Time, interval time.Duration) time.Time {
 // and returns the exit status and true
 // if error is not exit status, will return 0 and false
 func ExitStatus(err error) (int, bool) {
-	if exiterr, ok := err.(*exec.ExitError); ok {
-		if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		if status, ok := exitErr.Sys().(syscall.WaitStatus); ok {
 			return status.ExitStatus(), true
 		}
 	}
@@ -194,30 +198,39 @@ func (r *ReadWaitCloser) Close() error {
 	return err
 }
 
-// CompressWithGzip takes an io.Reader as input and pipes
-// it through a gzip.Writer returning an io.Reader containing
-// the gzipped data.
-// An error is returned if passing data to the gzip.Writer fails
-func CompressWithGzip(data io.Reader) (io.ReadCloser, error) {
+// CompressWithGzip takes an io.Reader as input and pipes it through a
+// gzip.Writer returning an io.Reader containing the gzipped data.
+// Errors occurring during compression are returned to the instance reading
+// from the returned reader via through the corresponding read call
+// (e.g. io.Copy or io.ReadAll).
+func CompressWithGzip(data io.Reader) io.ReadCloser {
 	pipeReader, pipeWriter := io.Pipe()
 	gzipWriter := gzip.NewWriter(pipeWriter)
 
-	rc := &ReadWaitCloser{
-		pipeReader: pipeReader,
-	}
-
-	rc.wg.Add(1)
-	var err error
+	// Start copying from the uncompressed reader to the output reader
+	// in the background until the input reader is closed (or errors out).
 	go func() {
-		_, err = io.Copy(gzipWriter, data)
-		gzipWriter.Close()
-		// subsequent reads from the read half of the pipe will
-		// return no bytes and the error err, or EOF if err is nil.
-		pipeWriter.CloseWithError(err)
-		rc.wg.Done()
+		// This copy will block until "data" reached EOF or an error occurs
+		_, err := io.Copy(gzipWriter, data)
+
+		// Close the compression writer and make sure we do not overwrite
+		// the copy error if any.
+		gzipErr := gzipWriter.Close()
+		if err == nil {
+			err = gzipErr
+		}
+
+		// Subsequent reads from the output reader (connected to "pipeWriter"
+		// via pipe) will return the copy (or closing) error if any to the
+		// instance reading from the reader returned by the CompressWithGzip
+		// function. If "err" is nil, the below function will correctly report
+		// io.EOF.
+		_ = pipeWriter.CloseWithError(err)
 	}()
 
-	return pipeReader, err
+	// Return a reader which then can be read by the caller to collect the
+	// compressed stream.
+	return pipeReader
 }
 
 // ParseTimestamp parses a Time according to the standard Telegraf options.
@@ -239,7 +252,7 @@ func CompressWithGzip(data io.Reader) (io.ReadCloser, error) {
 // The location is a location string suitable for time.LoadLocation.  Unix
 // times do not use the location string, a unix time is always return in the
 // UTC location.
-func ParseTimestamp(format string, timestamp interface{}, location string, separator ...string) (time.Time, error) {
+func ParseTimestamp(format string, timestamp interface{}, location *time.Location, separator ...string) (time.Time, error) {
 	switch format {
 	case "unix", "unix_ms", "unix_us", "unix_ns":
 		sep := []string{",", "."}
@@ -345,10 +358,10 @@ func sanitizeTimestamp(timestamp string, decimalSeparator []string) string {
 }
 
 // parseTime parses a string timestamp according to the format string.
-func parseTime(format string, timestamp string, location string) (time.Time, error) {
-	loc, err := time.LoadLocation(location)
-	if err != nil {
-		return time.Unix(0, 0), err
+func parseTime(format string, timestamp string, location *time.Location) (time.Time, error) {
+	loc := location
+	if loc == nil {
+		loc = time.UTC
 	}
 
 	switch strings.ToLower(format) {
@@ -381,5 +394,40 @@ func parseTime(format string, timestamp string, location string) (time.Time, err
 	case "stampnano":
 		format = time.StampNano
 	}
-	return time.ParseInLocation(format, timestamp, loc)
+
+	if !strings.Contains(format, "MST") {
+		return time.ParseInLocation(format, timestamp, loc)
+	}
+
+	// Golang does not parse times with ambiguous timezone abbreviations,
+	// but only parses the time-fields and the timezone NAME with a zero
+	// offset (see https://groups.google.com/g/golang-nuts/c/hDMdnm_jUFQ/m/yeL9IHOsAQAJ).
+	// To handle those timezones correctly we can use the timezone-name and
+	// force parsing the time in that timezone. This way we get the correct
+	// time for the "most probably" of the ambiguous timezone-abbreviations.
+	ts, err := time.Parse(format, timestamp)
+	if err != nil {
+		return time.Time{}, err
+	}
+	zone, offset := ts.Zone()
+	if zone == "UTC" || offset != 0 {
+		return ts.In(loc), nil
+	}
+	once.Do(func() {
+		const msg = `Your config is using abbreviated timezones and parsing was changed in v1.27.0!
+		Please see the change log, remove any workarounds in place, and carefully
+		check your data timestamps! If case you experience any problems, please
+		file an issue on https://github.com/influxdata/telegraf/issues!`
+		log.Print("W! " + msg)
+	})
+
+	abbrevLoc, err := time.LoadLocation(zone)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("cannot resolve timezone abbreviation %q: %w", zone, err)
+	}
+	ts, err = time.ParseInLocation(format, timestamp, abbrevLoc)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return ts.In(loc), nil
 }

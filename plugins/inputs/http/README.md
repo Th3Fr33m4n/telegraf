@@ -6,6 +6,24 @@ formats](../../../docs/DATA_FORMATS_INPUT.md).  Each data format has its own
 unique set of configuration options which can be added to the input
 configuration.
 
+## Global configuration options <!-- @/docs/includes/plugin_config.md -->
+
+In addition to the plugin-specific configuration settings, plugins support
+additional global and plugin configuration settings. These settings are used to
+modify metrics, tags, and field or create aliases and configure ordering, etc.
+See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
+
+[CONFIGURATION.md]: ../../../docs/CONFIGURATION.md#plugins
+
+## Secret-store support
+
+This plugin supports secrets from secret-stores for the `username` and
+`password` option.
+See the [secret-store documentation][SECRETSTORE] for more details on how
+to use them.
+
+[SECRETSTORE]: ../../../docs/CONFIGURATION.md#secret-store-secrets
+
 ## Configuration
 
 ```toml @sample.conf
@@ -48,11 +66,17 @@ configuration.
   # http_proxy_url = ""
 
   ## Optional TLS Config
-  # tls_ca = "/etc/telegraf/ca.pem"
-  # tls_cert = "/etc/telegraf/cert.pem"
-  # tls_key = "/etc/telegraf/key.pem"
-  ## Minimal TLS version to accept by the client
-  # tls_min_version = "TLS12"
+  ## Set to true/false to enforce TLS being enabled/disabled. If not set,
+  ## enable TLS only if any of the other options are specified.
+  # tls_enable =
+  ## Trusted root certificates for server
+  # tls_ca = "/path/to/cafile"
+  ## Used for TLS client certificate authentication
+  # tls_cert = "/path/to/certfile"
+  ## Used for TLS client certificate authentication
+  # tls_key = "/path/to/keyfile"
+  ## Send the specified TLS server name via SNI
+  # tls_server_name = "kubernetes.example.com"
   ## Use TLS but skip chain & host verification
   # insecure_skip_verify = false
 
@@ -86,7 +110,7 @@ This example output was taken from [this instructional article][1].
 
 [1]: https://docs.influxdata.com/telegraf/v1.21/guides/using_http/
 
-```shell
+```text
 citibike,station_id=4703 eightd_has_available_keys=false,is_installed=1,is_renting=1,is_returning=1,legacy_id="4703",num_bikes_available=6,num_bikes_disabled=2,num_docks_available=26,num_docks_disabled=0,num_ebikes_available=0,station_status="active" 1641505084000000000
 citibike,station_id=4704 eightd_has_available_keys=false,is_installed=1,is_renting=1,is_returning=1,legacy_id="4704",num_bikes_available=10,num_bikes_disabled=2,num_docks_available=36,num_docks_disabled=0,num_ebikes_available=0,station_status="active" 1641505084000000000
 citibike,station_id=4711 eightd_has_available_keys=false,is_installed=1,is_renting=1,is_returning=1,legacy_id="4711",num_bikes_available=9,num_bikes_disabled=0,num_docks_available=36,num_docks_disabled=0,num_ebikes_available=1,station_status="active" 1641505084000000000
