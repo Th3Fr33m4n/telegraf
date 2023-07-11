@@ -47,6 +47,13 @@ var (
 	// be fetched from a remote or read from the filesystem.
 	fetchURLRe = regexp.MustCompile(`^\w+://`)
 
+	// oldVarRe is a regex to reproduce pre v1.27.0 environment variable
+	// replacement behavior
+	oldVarRe = regexp.MustCompile(`\$(?i:(?P<named>[_a-z][_a-z0-9]*)|{(?:(?P<braced>[_a-z][_a-z0-9]*(?::?[-+?](.*))?)}|(?P<invalid>)))`)
+	// OldEnvVarReplacement is a switch to allow going back to pre v1.27.0
+	// environment variable replacement behavior
+	OldEnvVarReplacement = false
+
 	// Password specified via command-line
 	Password Secret
 )
@@ -376,7 +383,7 @@ func WalkDirectory(path string) ([]string, error) {
 //  1. $TELEGRAF_CONFIG_PATH
 //  2. $HOME/.telegraf/telegraf.conf
 //  3. /etc/telegraf/telegraf.conf and /etc/telegraf/telegraf.d/*.conf
-func getDefaultConfigPath() ([]string, error) {
+func GetDefaultConfigPath() ([]string, error) {
 	envfile := os.Getenv("TELEGRAF_CONFIG_PATH")
 	homefile := os.ExpandEnv("${HOME}/.telegraf/telegraf.conf")
 	etcfile := "/etc/telegraf/telegraf.conf"
@@ -434,7 +441,7 @@ func (c *Config) LoadConfig(path string) error {
 	paths := []string{}
 
 	if path == "" {
-		if paths, err = getDefaultConfigPath(); err != nil {
+		if paths, err = GetDefaultConfigPath(); err != nil {
 			return err
 		}
 	} else {
@@ -446,7 +453,7 @@ func (c *Config) LoadConfig(path string) error {
 			log.Printf("I! Loading config: %s", path)
 		}
 
-		data, err := LoadConfigFile(path)
+		data, _, err := LoadConfigFile(path)
 		if err != nil {
 			return fmt.Errorf("error loading config file %s: %w", path, err)
 		}
@@ -696,33 +703,37 @@ func trimBOM(f []byte) []byte {
 	return bytes.TrimPrefix(f, []byte("\xef\xbb\xbf"))
 }
 
-func LoadConfigFile(config string) ([]byte, error) {
+// LoadConfigFile loads the content of a configuration file and returns it
+// together with a flag denoting if the file is from a remote location such
+// as a web server.
+func LoadConfigFile(config string) ([]byte, bool, error) {
 	if fetchURLRe.MatchString(config) {
 		u, err := url.Parse(config)
 		if err != nil {
-			return nil, err
+			return nil, true, err
 		}
 
 		switch u.Scheme {
 		case "https", "http":
-			return fetchConfig(u)
+			data, err := fetchConfig(u)
+			return data, true, err
 		default:
-			return nil, fmt.Errorf("scheme %q not supported", u.Scheme)
+			return nil, true, fmt.Errorf("scheme %q not supported", u.Scheme)
 		}
 	}
 
 	// If it isn't a https scheme, try it as a file
 	buffer, err := os.ReadFile(config)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	mimeType := http.DetectContentType(buffer)
 	if !strings.Contains(mimeType, "text/plain") {
-		return nil, fmt.Errorf("provided config is not a TOML file: %s", config)
+		return nil, false, fmt.Errorf("provided config is not a TOML file: %s", config)
 	}
 
-	return buffer, nil
+	return buffer, false, nil
 }
 
 func fetchConfig(u *url.URL) ([]byte, error) {
@@ -781,7 +792,7 @@ func parseConfig(contents []byte) (*ast.Table, error) {
 	if err != nil {
 		return nil, err
 	}
-	outputBytes, err := substituteEnvironment(contents)
+	outputBytes, err := substituteEnvironment(contents, OldEnvVarReplacement)
 	if err != nil {
 		return nil, err
 	}
@@ -844,19 +855,36 @@ func removeComments(contents []byte) ([]byte, error) {
 	return output.Bytes(), nil
 }
 
-func substituteEnvironment(contents []byte) ([]byte, error) {
+func substituteEnvironment(contents []byte, oldReplacementBehavior bool) ([]byte, error) {
+	options := []template.Option{
+		template.WithReplacementFunction(func(s string, m template.Mapping, cfg *template.Config) (string, error) {
+			result, applied, err := template.DefaultReplacementAppliedFunc(s, m, cfg)
+			if err == nil && !applied {
+				// Keep undeclared environment-variable patterns to reproduce
+				// pre-v1.27 behavior
+				return s, nil
+			}
+			if err != nil && strings.HasPrefix(err.Error(), "Invalid template:") {
+				// Keep invalid template patterns to ignore regexp substitutions
+				// like ${1}
+				return s, nil
+			}
+			return result, err
+		}),
+		template.WithoutLogging,
+	}
+	if oldReplacementBehavior {
+		options = append(options, template.WithPattern(oldVarRe))
+	}
+
 	envMap := utils.GetAsEqualsMap(os.Environ())
-	retVal, err := template.Substitute(string(contents), func(k string) (string, bool) {
+	retVal, err := template.SubstituteWithOptions(string(contents), func(k string) (string, bool) {
 		if v, ok := envMap[k]; ok {
 			return v, ok
 		}
 		return "", false
-	})
-	var invalidTmplError *template.InvalidTemplateError
-	if err != nil && !errors.As(err, &invalidTmplError) {
-		return nil, err
-	}
-	return []byte(retVal), nil
+	}, options...)
+	return []byte(retVal), err
 }
 
 func (c *Config) addAggregator(name string, table *ast.Table) error {
