@@ -23,7 +23,7 @@ require (
 	github.com/Masterminds/sprig v2.22.0+incompatible
 	github.com/Mellanox/rdmamap v1.1.0
 	github.com/Shopify/sarama v1.38.1
-	github.com/Th3Fr33m4n/udp_rcon v0.0.0-20230711022451-ea17de9d5957
+	github.com/Th3Fr33m4n/udp_rcon v0.0.0-20230711055527-fa27097353f4
 	github.com/aerospike/aerospike-client-go/v5 v5.11.0
 	github.com/alecthomas/units v0.0.0-20211218093645-b94a6e3cc137
 	github.com/aliyun/alibaba-cloud-sdk-go v1.62.389
