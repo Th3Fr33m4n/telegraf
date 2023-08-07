@@ -83,7 +83,10 @@ linters-settings:
       - builtinShadowDecl
       - caseOrder
       - codegenComment
+      - commentedOutCode
       - deferInLoop
+      - dupArg
+      - deprecatedComment
       - dupBranchBody
       - dupCase
       - dupSubExpr
@@ -92,12 +95,19 @@ linters-settings:
       - evalOrder
       - exitAfterDefer
       - externalErrorReassign
+      - flagName
+      - mapKey
       - nilValReturn
+      - offBy1
       - regexpPattern
+      - sloppyTestFuncName
+      - sloppyReassign
       - sloppyTypeAssert
       - sortSlice
       - sprintfQuotedString
       - sqlQuery
+      - syncMapLoadAndDelete
+      - truncateCmp
       - uncheckedInlineErr
       - unnecessaryDefer
       - weakCond
