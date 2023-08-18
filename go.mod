@@ -5,7 +5,7 @@ go 1.20
 require (
 	cloud.google.com/go/bigquery v1.52.0
 	cloud.google.com/go/monitoring v1.15.1
-	cloud.google.com/go/pubsub v1.32.0
+	cloud.google.com/go/pubsub v1.33.0
 	cloud.google.com/go/storage v1.30.1
 	collectd.org v0.5.0
 	github.com/99designs/keyring v1.2.2
@@ -40,13 +40,13 @@ require (
 	github.com/awnumar/memguard v0.22.3
 	github.com/aws/aws-sdk-go-v2 v1.20.1
 	github.com/aws/aws-sdk-go-v2/config v1.18.27
-	github.com/aws/aws-sdk-go-v2/credentials v1.13.26
-	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.13.7
+	github.com/aws/aws-sdk-go-v2/credentials v1.13.32
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.13.8
 	github.com/aws/aws-sdk-go-v2/service/cloudwatch v1.26.2
 	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.20.9
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.20.0
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.80.1
-	github.com/aws/aws-sdk-go-v2/service/kinesis v1.18.0
+	github.com/aws/aws-sdk-go-v2/service/kinesis v1.18.2
 	github.com/aws/aws-sdk-go-v2/service/sts v1.21.2
 	github.com/aws/aws-sdk-go-v2/service/timestreamwrite v1.17.2
 	github.com/aws/smithy-go v1.14.1
@@ -130,7 +130,7 @@ require (
 	github.com/mdlayher/apcupsd v0.0.0-20220319200143-473c7b5f3c6a
 	github.com/microsoft/ApplicationInsights-Go v0.4.4
 	github.com/microsoft/go-mssqldb v1.5.0
-	github.com/miekg/dns v1.1.51
+	github.com/miekg/dns v1.1.55
 	github.com/moby/ipvs v1.1.0
 	github.com/multiplay/go-ts3 v1.1.0
 	github.com/nats-io/nats-server/v2 v2.9.9
@@ -157,6 +157,7 @@ require (
 	github.com/rabbitmq/amqp091-go v1.8.1
 	github.com/riemann/riemann-go-client v0.5.1-0.20211206220514-f58f10cdce16
 	github.com/robbiet480/go.nut v0.0.0-20220219091450-bd8f121e1fa1
+	github.com/robinson/gos7 v0.0.0-20230421131203-d20ac6ca08cd
 	github.com/safchain/ethtool v0.3.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/sensu/sensu-go/api/core/v2 v2.16.0
@@ -183,7 +184,7 @@ require (
 	github.com/x448/float16 v0.8.4
 	github.com/xdg/scram v1.0.5
 	github.com/yuin/goldmark v1.5.4
-	go.mongodb.org/mongo-driver v1.11.6
+	go.mongodb.org/mongo-driver v1.12.1
 	go.opentelemetry.io/collector/pdata v1.0.0-rcv0013
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v0.39.0
 	go.opentelemetry.io/otel/sdk/metric v0.39.0
@@ -251,7 +252,7 @@ require (
 	github.com/aristanetworks/glog v0.0.0-20191112221043-67e8567f59f3 // indirect
 	github.com/armon/go-metrics v0.4.1 // indirect
 	github.com/awnumar/memcall v0.1.2 // indirect
-	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.4.11 // indirect
+	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.4.12 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.2.0 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.11.70 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.1.38 // indirect
@@ -265,8 +266,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.9.32 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.14.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.35.0 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sso v1.12.12 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.14.12 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.13.2 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.15.2 // indirect
 	github.com/awslabs/kinesis-aggregation/go v0.0.0-20210630091500-54e17340d32f // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bitly/go-hostpool v0.1.0 // indirect
@@ -492,3 +493,5 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
+
+replace github.com/robinson/gos7 => github.com/srebhan/gos7 v0.0.0-20230807171120-77ee3120c4eb
