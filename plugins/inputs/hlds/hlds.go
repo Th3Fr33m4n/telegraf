@@ -59,7 +59,7 @@ func init() {
 	})
 }
 
-func (s *HLDS) gatherServer(
+func (*HLDS) gatherServer(
 	acc telegraf.Accumulator,
 	server []string,
 	request func(string, string) (string, error),
@@ -143,7 +143,7 @@ func (s *HLDS) gatherServer(
 	return nil
 }
 
-func requestServer(url string, rconPw string) (string, error) {
+func requestServer(url, rconPw string) (string, error) {
 	remoteConsole, err := rcon.NewRemoteConsole(url, rconPw, true, rcon.UdpConnector{})
 	if err != nil {
 		return "", err
