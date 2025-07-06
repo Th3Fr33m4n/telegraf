@@ -1,6 +1,12 @@
-# GoldSrc HLDS Input Plugin
+# HLDS Input Plugin
 
-The `hlds` plugin gather metrics from GoldSrc HLDS (Half-life dedicated server).
+This plugin gathers metrics from GoldSrc [HLDS][HLDS].
+
+⭐ Telegraf v1.0.0
+🏷️ network, server
+💻 all
+
+[HLDS]: https://developer.valvesoftware.com/wiki/Half-Life_Dedicated_Server
 
 ## Global configuration options <!-- @/docs/includes/plugin_config.md -->
 
