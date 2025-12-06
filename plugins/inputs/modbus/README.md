@@ -12,10 +12,9 @@ or serial interfaces with Modbus RTU or Modbus ASCII.
 
 ## Global configuration options <!-- @/docs/includes/plugin_config.md -->
 
-In addition to the plugin-specific configuration settings, plugins support
-additional global and plugin configuration settings. These settings are used to
-modify metrics, tags, and field or create aliases and configure ordering, etc.
-See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
+Plugins support additional global and plugin configuration settings for tasks
+such as modifying metrics, tags, and fields, creating aliases, and configuring
+plugin ordering. See [CONFIGURATION.md][CONFIGURATION.md] for more details.
 
 [CONFIGURATION.md]: ../../../docs/CONFIGURATION.md#plugins
 
@@ -417,7 +416,8 @@ This is the original style used by this plugin. It allows a per-register
 configuration for a single slave-device.
 
 > [!NOTE]
-> For legacy reasons this configuration style is not completely consistent with the other styles.
+> For legacy reasons this configuration style is not completely consistent with
+> the other styles.
 
 #### Usage of `data_type`
 
@@ -543,17 +543,6 @@ Requests are processed similar to `shrink` but the request boundaries are
 rearranged such that usually less registers are being read while keeping the
 number of requests. This optimization algorithm only works on consecutive
 address ranges and respects user-defined gaps in the field addresses.
-
-__Please note:__ This optimization might take long in case of many
-non-consecutive, non-omitted fields!
-
-##### `aggressive`
-
-Requests are processed similar to `rearrange` but user-defined gaps in the field
-addresses are filled automatically. This usually reduces the number of requests,
-but will increase the number of registers read due to larger requests.
-This algorithm might be useful if you only want to specify the fields you are
-interested in but want to minimize the number of requests sent to the device.
 
 __Please note:__ This optimization might take long in case of many
 non-consecutive, non-omitted fields!

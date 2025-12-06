@@ -10,10 +10,9 @@ stored in another key.
 
 ## Global configuration options <!-- @/docs/includes/plugin_config.md -->
 
-In addition to the plugin-specific configuration settings, plugins support
-additional global and plugin configuration settings. These settings are used to
-modify metrics, tags, and field or create aliases and configure ordering, etc.
-See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
+Plugins support additional global and plugin configuration settings for tasks
+such as modifying metrics, tags, and fields, creating aliases, and configuring
+plugin ordering. See [CONFIGURATION.md][CONFIGURATION.md] for more details.
 
 [CONFIGURATION.md]: ../../../docs/CONFIGURATION.md#plugins
 
@@ -181,14 +180,15 @@ injected for every file.
 
 Scenario:
 
-* A log file `/var/log/myjobs/mysql_backup.log`, containing logs for a job execution. Whenever the job ends, a line is
-written to the log file following this format: `2020-04-05 11:45:21 total time execution: 70 seconds`
-* We want to generate a measurement that captures the duration of the script as a field and includes the `path` as a
-tag
-  * We are interested in the filename without its extensions, since it might be enough information for plotting our
-    execution times in a dashboard
-  * Just in case, we don't want to override the original path (if for some reason we end up having duplicates we might
-    want this information)
+* A log file `/var/log/myjobs/mysql_backup.log`, containing logs for a job
+  execution. Whenever the job ends, a line is written to the log file following
+  this format: `2020-04-05 11:45:21 total time execution: 70 seconds`
+* We want to generate a measurement that captures the duration of the script as
+  a field and includes the `path` as a tag
+  * We are interested in the filename without its extensions, since it might be
+    enough information for plotting our execution times in a dashboard
+  * Just in case, we don't want to override the original path (if for some
+    reason we end up having duplicates we might want this information)
 
 For this purpose, we will use the `tail` input plugin, the `grok` parser plugin
 and the `filepath` processor.

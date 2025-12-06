@@ -14,10 +14,9 @@ including clusters, hosts, resource pools, VMs, datastores and vSAN information.
 
 ## Global configuration options <!-- @/docs/includes/plugin_config.md -->
 
-In addition to the plugin-specific configuration settings, plugins support
-additional global and plugin configuration settings. These settings are used to
-modify metrics, tags, and field or create aliases and configure ordering, etc.
-See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
+Plugins support additional global and plugin configuration settings for tasks
+such as modifying metrics, tags, and fields, creating aliases, and configuring
+plugin ordering. See [CONFIGURATION.md][CONFIGURATION.md] for more details.
 
 [CONFIGURATION.md]: ../../../docs/CONFIGURATION.md#plugins
 
@@ -428,7 +427,6 @@ instance. For example:
   password = "secret"
 
   insecure_skip_verify = true
-  force_discover_on_init = true
 
   # Exclude all historical metrics
   datastore_metric_exclude = ["*"]
@@ -450,7 +448,6 @@ instance. For example:
   password = "secret"
 
   insecure_skip_verify = true
-  force_discover_on_init = true
   host_metric_exclude = ["*"] # Exclude realtime metrics
   vm_metric_exclude = ["*"] # Exclude realtime metrics
 
@@ -1210,7 +1207,6 @@ For example:
   password = "secret"
 
   insecure_skip_verify = true
-  force_discover_on_init = true
 
   # Exclude all other metrics
   vm_metric_exclude = ["*"]
@@ -1235,7 +1231,6 @@ For example:
   password = "secret"
 
   insecure_skip_verify = true
-  force_discover_on_init = true
 
   # Exclude all other metrics
   vm_metric_exclude = ["*"]

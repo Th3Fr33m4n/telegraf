@@ -12,10 +12,9 @@ plugin also supports various service-discovery methods.
 
 ## Global configuration options <!-- @/docs/includes/plugin_config.md -->
 
-In addition to the plugin-specific configuration settings, plugins support
-additional global and plugin configuration settings. These settings are used to
-modify metrics, tags, and field or create aliases and configure ordering, etc.
-See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
+Plugins support additional global and plugin configuration settings for tasks
+such as modifying metrics, tags, and fields, creating aliases, and configuring
+plugin ordering. See [CONFIGURATION.md][CONFIGURATION.md] for more details.
 
 [CONFIGURATION.md]: ../../../docs/CONFIGURATION.md#plugins
 
@@ -262,9 +261,12 @@ cluster, or we use the kubeconfig file to determine where to monitor.  Currently
 the following annotation are supported:
 
 * `prometheus.io/scrape` Enable scraping for this pod.
-* `prometheus.io/scheme` If the metrics endpoint is secured then you will need to set this to `https` & most likely set the tls config. (default 'http')
-* `prometheus.io/path` Override the path for the metrics endpoint on the service. (default '/metrics')
-* `prometheus.io/port` Used to override the port. (default 9102)
+* `prometheus.io/scheme` If the metrics endpoint is secured then you will need
+                         to set this to `https` & most likely set the tls config.
+                        (default 'http')
+* `prometheus.io/path`  Override the path for the metrics endpoint on the service.
+                        (default '/metrics')
+* `prometheus.io/port`  Used to override the port. (default 9102)
 
 Using the `monitor_kubernetes_pods_namespace` option allows you to limit which
 pods you are scraping.
@@ -364,8 +366,10 @@ query a given http service discovery endpoint for available hosts. Using
 and refresh the list of scraped urls.  It can use the information from the
 response to build the scraped url and additional tags.
 
-More information on the format of http service discovery is found
-[here](https://prometheus.io/docs/prometheus/latest/http_sd/).
+More information on the format of http service discovery is found in the
+[prometheus documentation][http_sd].
+
+[http_sd]: https://prometheus.io/docs/prometheus/latest/http_sd
 
 ### Bearer Token
 

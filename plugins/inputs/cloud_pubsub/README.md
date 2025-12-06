@@ -23,10 +23,9 @@ normal plugins:
 
 ## Global configuration options <!-- @/docs/includes/plugin_config.md -->
 
-In addition to the plugin-specific configuration settings, plugins support
-additional global and plugin configuration settings. These settings are used to
-modify metrics, tags, and field or create aliases and configure ordering, etc.
-See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
+Plugins support additional global and plugin configuration settings for tasks
+such as modifying metrics, tags, and fields, creating aliases, and configuring
+plugin ordering. See [CONFIGURATION.md][CONFIGURATION.md] for more details.
 
 [CONFIGURATION.md]: ../../../docs/CONFIGURATION.md#plugins
 
@@ -78,7 +77,7 @@ See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
 
   ## The following are optional Subscription ReceiveSettings in PubSub.
   ## Read more about these values:
-  ## https://godoc.org/cloud.google.com/go/pubsub#ReceiveSettings
+  ## https://godoc.org/cloud.google.com/go/pubsub/v2#ReceiveSettings
 
   ## Optional. Maximum number of seconds for which a PubSub subscription
   ## should auto-extend the PubSub ACK deadline for each message. If less than

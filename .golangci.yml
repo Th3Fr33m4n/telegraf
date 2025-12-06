@@ -411,15 +411,6 @@ linters:
         # Poorly chosen identifier.
         # https://staticcheck.dev/docs/checks/#ST1003
         - -ST1003
-        # The documentation of an exported function should start with the function's name.
-        # https://staticcheck.dev/docs/checks/#ST1020
-        - -ST1020
-        # The documentation of an exported type should start with type's name.
-        # https://staticcheck.dev/docs/checks/#ST1021
-        - -ST1021
-        # The documentation of an exported variable or constant should start with variable's name.
-        # https://staticcheck.dev/docs/checks/#ST1022
-        - -ST1022
         # Apply De Morgan's law.
         # https://staticcheck.dev/docs/checks/#QF1001
         - -QF1001
@@ -517,6 +508,10 @@ linters:
       # revive:var-naming
       - path: (.+)\.go$
         text: don't use an underscore in package name
+
+      # revive:var-naming
+      - path: (.*)\.go$
+        text: avoid meaningless package names
 
       # revive:var-naming: Exclude mixed-caps packages in migrations, as these migrations are fixing the issues from before.
       - path: migrations/.*\.go$

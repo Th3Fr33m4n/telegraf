@@ -31,10 +31,9 @@ normal plugins:
 
 ## Global configuration options <!-- @/docs/includes/plugin_config.md -->
 
-In addition to the plugin-specific configuration settings, plugins support
-additional global and plugin configuration settings. These settings are used to
-modify metrics, tags, and field or create aliases and configure ordering, etc.
-See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
+Plugins support additional global and plugin configuration settings for tasks
+such as modifying metrics, tags, and fields, creating aliases, and configuring
+plugin ordering. See [CONFIGURATION.md][CONFIGURATION.md] for more details.
 
 [CONFIGURATION.md]: ../../../docs/CONFIGURATION.md#plugins
 
@@ -116,6 +115,10 @@ See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
   ## For each combination a field is created.
   ## Its name is created concatenating identifier, sdparam_separator, and parameter name.
   # sdparam_separator = "_"
+
+  ## Maximum length allowed for a single message (in bytes when no unit specified)
+  ## Only applies to octet-counting framing.
+  # max_message_length = "8KiB"
 ```
 
 ### Message transport
@@ -193,9 +196,11 @@ echo "<13>1 2018-10-01T12:00:00.0Z example.org root - - - test" | nc -u 127.0.0.
 
 The `source` tag stores the remote IP address of the syslog sender.
 To resolve these IPs to DNS names, use the
-[`reverse_dns` processor](../../../plugins/processors/reverse_dns).
+[`reverse_dns` processor][plugin_reverse_dns]
 
 You can send debugging messages directly to the input plugin using netcat:
+
+[plugin_reverse_dns]: /plugins/processors/reverse_dns/README.md
 
 ### RFC3164
 

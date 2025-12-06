@@ -46,6 +46,7 @@ type GlobalFlags struct {
 	plugindDir              string
 	password                string
 	oldEnvBehavior          bool
+	nonStrictEnvVars        bool
 	printPluginConfigSource bool
 	test                    bool
 	debug                   bool
@@ -107,7 +108,7 @@ func (t *Telegraf) Init(pprofErr <-chan error, f Filters, g GlobalFlags, w Windo
 
 	// Set environment replacement behavior
 	config.OldEnvVarReplacement = g.oldEnvBehavior
-
+	config.NonStrictEnvVarHandling = g.nonStrictEnvVars
 	config.PrintPluginConfigSource = g.printPluginConfigSource
 }
 
@@ -275,7 +276,9 @@ func (t *Telegraf) watchLocalConfig(ctx context.Context, signals chan os.Signal,
 	for {
 		select {
 		case <-ctx.Done():
-			reloadTimer.Stop()
+			if reloadTimer != nil {
+				reloadTimer.Stop()
+			}
 			mytomb.Done()
 			return
 
@@ -325,7 +328,9 @@ func (t *Telegraf) watchLocalConfig(ctx context.Context, signals chan os.Signal,
 			}
 
 		case <-mytomb.Dying():
-			reloadTimer.Stop()
+			if reloadTimer != nil {
+				reloadTimer.Stop()
+			}
 			log.Printf("I! Config watcher %q ended\n", fConfig)
 			return
 		}

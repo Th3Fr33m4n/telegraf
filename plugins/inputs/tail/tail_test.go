@@ -1117,6 +1117,9 @@ func TestTailNoLeak(t *testing.T) {
 			"Expected exactly one tailer after Gather #%d, but found %d", i+1, currentTailerCount)
 	}
 
+	// Reset metrics to make it easier to test for the new value
+	acc.ClearMetrics()
+
 	// Append new content to the file to verify the tailer is still working
 	appendContent := "cpu usage_idle=200\r\n"
 	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_WRONLY, 0600)
@@ -1125,16 +1128,13 @@ func TestTailNoLeak(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 
-	// Reset metrics to make it easier to test for the new value
-	acc.ClearMetrics()
-
 	// Call Gather to pick up the new content
 	require.NoError(t, acc.GatherError(tt.Gather))
 
-	// Wait for the new metric
+	// Wait for the new metric (increased timeout for slower environments like ARM64 CircleCI)
 	require.Eventually(t, func() bool {
 		return acc.NMetrics() >= 1
-	}, time.Second, 100*time.Millisecond, "Did not receive metric after appending to file")
+	}, 3*time.Second, 100*time.Millisecond, "Did not receive metric after appending to file")
 
 	// Verify we got the new metric
 	acc.AssertContainsFields(t, "cpu",

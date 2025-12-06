@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -65,6 +66,8 @@ type Tail struct {
 	cancel  context.CancelFunc
 	sem     semaphore
 	decoder *encoding.Decoder
+
+	nomatch map[string]bool
 }
 
 type empty struct{}
@@ -116,6 +119,10 @@ func (t *Tail) Init() error {
 		return fmt.Errorf("creating decoder failed: %w", err)
 	}
 	t.decoder = dec
+
+	// Initialize the map to keep track of patterns that did not produce any
+	// matching files to warn about potential permission issues only once.
+	t.nomatch = make(map[string]bool)
 
 	return nil
 }
@@ -220,12 +227,12 @@ func (t *Tail) Stop() {
 				t.Log.Debugf("Recording offset %d for %q", offset, tailer.Filename)
 				t.offsets[tailer.Filename] = offset
 			} else {
-				t.Log.Errorf("Recording offset for %q: %s", tailer.Filename, err.Error())
+				t.Log.Errorf("Recording offset for %q: %v", tailer.Filename, err)
 			}
 		}
 		err := tailer.Stop()
 		if err != nil {
-			t.Log.Errorf("Stopping tail on %q: %s", tailer.Filename, err.Error())
+			t.Log.Errorf("Stopping tail on %q: %v", tailer.Filename, err)
 		}
 
 		// Explicitly delete the tailer from the map to avoid memory leaks
@@ -256,11 +263,45 @@ func (t *Tail) tailNewFiles() error {
 	for _, filepath := range t.Files {
 		g, err := globpath.Compile(filepath)
 		if err != nil {
-			t.Log.Errorf("Glob %q failed to compile: %s", filepath, err.Error())
+			t.Log.Errorf("Glob %q failed to compile: %v", filepath, err)
 			continue
 		}
 
-		for _, file := range g.Match() {
+		// Work around an issue in the doublestar library that requires read
+		// permissions on the directory to glob files (see
+		// https://github.com/bmatcuk/doublestar/issues/103).
+		// However, if the given file does not require globbing we can try to
+		// keep the file directly.
+		matches := g.Match()
+		if len(matches) == 0 {
+			if _, err := os.Lstat(filepath); err == nil {
+				matches = append(matches, filepath)
+			} else if !t.nomatch[filepath] && strings.ContainsAny(filepath, "*?[") {
+				// Read permissions are required to expand wildcards so find all
+				// directories followed by wildcards and check if they are readable
+				parts := strings.Split(filepath, string(os.PathSeparator))
+				for i, e := range parts {
+					if e == "" || !strings.ContainsAny(e, "*?[") {
+						continue
+					}
+					partialPath := strings.Join(parts[:i], string(os.PathSeparator))
+					if stat, err := os.Stat(partialPath); err != nil || !stat.IsDir() {
+						break
+					}
+					if _, err := os.ReadDir(partialPath); errors.Is(err, os.ErrPermission) {
+						t.Log.Warnf(
+							"Directory %q is not readable but is followed by wildcards,"+
+								"make sure you set read permissions or globbing will not work!", partialPath,
+						)
+						break
+					}
+				}
+
+				t.nomatch[filepath] = true
+			}
+		}
+
+		for _, file := range matches {
 			// Mark this file as currently being processed
 			currentFiles[file] = true
 
@@ -303,7 +344,7 @@ func (t *Tail) tailNewFiles() error {
 
 			parser, err := t.parserFunc()
 			if err != nil {
-				t.Log.Errorf("Creating parser: %s", err.Error())
+				t.Log.Errorf("Creating parser: %v", err)
 				continue
 			}
 
@@ -328,7 +369,7 @@ func (t *Tail) tailNewFiles() error {
 						delete(t.tailers, tl.Filename)
 						t.tailersMutex.Unlock()
 					} else {
-						t.Log.Errorf("Tailing %q: %s", tl.Filename, err.Error())
+						t.Log.Errorf("Tailing %q: %v", tl.Filename, err)
 					}
 				}
 			}(tailer)
@@ -351,21 +392,22 @@ func (t *Tail) cleanupUnusedTailers(currentFiles map[string]bool) error {
 			// We need to stop tailing it and remove it from our list
 			t.Log.Debugf("Removing tailer for %q as it's no longer in the glob pattern", file)
 
-			// Save the current offset for potential future use
+			// Stop the tailer first to avoid race conditions
+			// This ensures the tail goroutine is no longer running when we call Tell()
+			if err := tailer.Stop(); err != nil {
+				t.Log.Errorf("Stopping tail on %q: %v", tailer.Filename, err)
+			}
+
+			// Now it's safe to get and save the offset since the tailer is stopped
 			if !t.Pipe {
 				offset, err := tailer.Tell()
 				if err == nil {
 					t.Log.Debugf("Recording offset %d for %q", offset, tailer.Filename)
 					t.offsets[tailer.Filename] = offset
 				} else {
-					t.Log.Errorf("Recording offset for %q: %s", tailer.Filename, err.Error())
+					// This can happen if the file was already removed or closed
+					t.Log.Debugf("Could not get offset for %q: %v", tailer.Filename, err)
 				}
-			}
-
-			// Stop the tailer
-			err := tailer.Stop()
-			if err != nil {
-				t.Log.Errorf("Stopping tail on %q: %s", tailer.Filename, err.Error())
 			}
 
 			// Remove from our map
@@ -447,7 +489,7 @@ func (t *Tail) receiver(parser telegraf.Parser, tailer *tail.Tail) {
 		}
 
 		if line != nil && line.Err != nil {
-			t.Log.Errorf("Tailing %q: %s", tailer.Filename, line.Err.Error())
+			t.Log.Errorf("Tailing %q: %v", tailer.Filename, line.Err)
 			continue
 		}
 
@@ -461,8 +503,8 @@ func (t *Tail) receiver(parser telegraf.Parser, tailer *tail.Tail) {
 
 		metrics, err := parseLine(parser, text)
 		if err != nil {
-			t.Log.Errorf("Malformed log line in %q: [%q]: %s",
-				tailer.Filename, text, err.Error())
+			t.Log.Errorf("Malformed log line in %q: [%q]: %v",
+				tailer.Filename, text, err)
 			continue
 		}
 		if len(metrics) == 0 {

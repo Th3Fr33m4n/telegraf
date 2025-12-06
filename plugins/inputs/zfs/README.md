@@ -11,10 +11,9 @@ This plugin gathers metrics from [ZFS][zfs] filesystems using
 
 ## Global configuration options <!-- @/docs/includes/plugin_config.md -->
 
-In addition to the plugin-specific configuration settings, plugins support
-additional global and plugin configuration settings. These settings are used to
-modify metrics, tags, and field or create aliases and configure ordering, etc.
-See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
+Plugins support additional global and plugin configuration settings for tasks
+such as modifying metrics, tags, and fields, creating aliases, and configuring
+plugin ordering. See [CONFIGURATION.md][CONFIGURATION.md] for more details.
 
 [CONFIGURATION.md]: ../../../docs/CONFIGURATION.md#plugins
 
@@ -41,7 +40,27 @@ See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
 
   ## By default, don't gather dataset stats
   # datasetMetrics = false
+
+  ## Report fields as the type defined by ZFS (Linux only)
+  ## This is disabled for backward compatibility but is STRONGLY RECOMMENDED
+  ## to be enabled to avoid overflows. This requires UINT support on the output
+  ## for most fields.
+  ## useNativeTypes = false
 ```
+
+OpenZFS on Linux reports the type of fields especially for the dataset metrics.
+By default this plugin will ignore the provided type and will report metrics as
+signed 64-bit integers.
+
+It is **highly recommended** to use the reported type by setting
+`useNativeTypes` to `true` for avoiding overflows of field values as most fields
+are reported as **unsigned** 64-bit integers. Additionally, you must make sure
+your output supports reporting unsigned values!
+
+> [!WARNING]
+> Changing the setting for `useNativeTypes` will generate metrics with
+> conflicting field types so you need to either migrate existing data or clear
+> your database for e.g. InfluxDB outputs!
 
 ## Metrics
 

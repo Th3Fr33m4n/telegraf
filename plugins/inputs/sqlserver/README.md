@@ -18,10 +18,9 @@ metrics are lightweight and use Dynamic Management Views supplied by SQL Server.
 
 ## Global configuration options <!-- @/docs/includes/plugin_config.md -->
 
-In addition to the plugin-specific configuration settings, plugins support
-additional global and plugin configuration settings. These settings are used to
-modify metrics, tags, and field or create aliases and configure ordering, etc.
-See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
+Plugins support additional global and plugin configuration settings for tasks
+such as modifying metrics, tags, and fields, creating aliases, and configuring
+plugin ordering. See [CONFIGURATION.md][CONFIGURATION.md] for more details.
 
 [CONFIGURATION.md]: ../../../docs/CONFIGURATION.md#plugins
 
@@ -167,7 +166,23 @@ to use them.
   ## and following as optional (if mentioned in the include_query list)
   ## - SQLServerAvailabilityReplicaStates
   ## - SQLServerDatabaseReplicaStates
+
+  ## Maximum number of open connections to the database, 0 allows the driver to decide.
+  # max_open_connections = 0
+
+  ## Maximum number of idle connections in the connection pool, 0 allows the driver to decide.
+  # max_idle_connections = 0
 ```
+
+For available options in the `servers` DSN check the [driver documentation][driver].
+
+The plugin supports the named-pipe and LPC protocol **on Windows AMD64 and i386**
+for connections. On other platforms those protocols are not available. See the
+[protocol configuration section][driver_protos] of the driver documentation on
+how to specify the protocols.
+
+[driver]: https://github.com/microsoft/go-mssqldb
+[driver_protos]: https://github.com/microsoft/go-mssqldb?tab=readme-ov-file#protocol-configuration
 
 ### Additional Setup
 
@@ -273,11 +288,11 @@ strings.
 
 If more then one managed identity is assigned to the VM, you need specify the
 `client_id` of the identity you wish to use to authenticate with the SQL Server.
-Please check [SQL Server driver][driver] documentation for available options.
+Please check [SQL Server driver][driver_azure] documentation for available options.
 
 [auth_methods]: https://docs.microsoft.com/en-us/azure/azure-sql/database/security-overview#authentication
 [auth_aad]: https://docs.microsoft.com/en-us/azure/azure-sql/database/authentication-aad-overview
-[driver]: https://github.com/microsoft/go-mssqldb#azure-active-directory-authentication
+[driver_azure]: https://github.com/microsoft/go-mssqldb#azure-active-directory-authentication
 
 ### Azure Active Directory (AAD) authentication using MSI
 
@@ -364,21 +379,51 @@ If you are using the original queries all stats have the following tags:
 The new (version 2) metrics provide:
 
 - *Database IO*: IO stats from `sys.dm_io_virtual_file_stats`.
-- *Memory Clerk*: Memory clerk breakdown from `sys.dm_os_memory_clerks`, most clerks have been given a friendly name.
-- *Performance Counters*: A select list of performance counters from `sys.dm_os_performance_counters`. Some of the important metrics included:
-  - *Activity*: Transactions/sec/database, Batch requests/sec, blocked processes, + more
-  - *Availability Groups*: Bytes sent to replica, Bytes received from replica, Log bytes received, Log send queue, transaction delay, + more
-  - *Log activity*: Log bytes flushed/sec, Log flushes/sec, Log Flush Wait Time
-  - *Memory*: PLE, Page reads/sec, Page writes/sec, + more
-  - *TempDB*: Free space, Version store usage, Active temp tables, temp table creation rate, + more
-  - *Resource Governor*: CPU Usage, Requests/sec, Queued Requests, and Blocked tasks per workload group + more
-- *Server properties*: Number of databases in all possible states (online, offline, suspect, etc.), cpu count, total physical memory, available physical memory, SQL Server service uptime, SQL Server SPID, and SQL Server version. In the case of Azure SQL relevant properties such as Tier, #Vcores, Memory etc.
-- *Wait stats*: Wait time in ms, number of waiting tasks, resource wait time, signal wait time, max wait time in ms, wait type, and wait category. The waits are categorized using the same categories used in Query Store.
-- *Schedulers* - This captures `sys.dm_os_schedulers`.
-- *SqlRequests* - This captures a snapshot of `sys.dm_exec_requests` and `sys.dm_exec_sessions` that gives you running requests as well as wait types and
-  blocking sessions. Telegraf's monitoring request is omitted unless it is a heading blocker. Also includes sleeping sessions with open transactions.
-- *VolumeSpace* - uses `sys.dm_os_volume_stats` to get total, used and occupied space on every disk that contains a data or log file. (Note that even if enabled it won't get any data from Azure SQL Database or SQL Managed Instance). It is pointless to run this with high frequency (ie: every 10s), but it won't cause any problem.
-- *Cpu* - uses the buffer ring (`sys.dm_os_ring_buffers`) to get CPU data, the table is updated once per minute. (Note that even if enabled it won't get any data from Azure SQL Database or SQL Managed Instance).
+- *Memory Clerk*: Memory clerk breakdown from `sys.dm_os_memory_clerks`, most
+                  clerks have been given a friendly name.
+- *Performance Counters*:  A select list of performance counters from
+                           `sys.dm_os_performance_counters`. Some of the
+                           important metrics included:
+  - *Activity*:            Transactions/sec/database, Batch requests/sec,
+                           blocked processes and more
+  - *Availability Groups*: Bytes sent to replica, Bytes received from replica,
+                           Log bytes received, Log send queue, transaction delay
+                           and more
+  - *Log activity*:        Log bytes flushed/sec, Log flushes/sec, Log Flush
+                           Wait Time
+  - *Memory*:              PLE, Page reads/sec, Page writes/sec and more
+  - *TempDB*:              Free space, Version store usage, Active temp tables,
+                           temp table creation rate and more
+  - *Resource Governor*:   CPU Usage, Requests/sec, Queued Requests, and Blocked
+                           tasks per workload group and more
+- *Server properties*:     Number of databases in all possible states (online,
+                           offline, suspect, etc.), cpu count, total physical
+                           memory, available physical memory, SQL Server service
+                           uptime, SQL Server SPID, and SQL Server version. In
+                           the case of Azure SQL relevant properties such as
+                           Tier, #Vcores, Memory etc.
+- *Wait stats*:            Wait time in ms, number of waiting tasks, resource
+                           wait time, signal wait time, max wait time in ms,
+                           wait type, and wait category. The waits are
+                           categorized using the same categories used in
+                           Query Store.
+- *Schedulers*:            This captures `sys.dm_os_schedulers`.
+- *SqlRequests*:           This captures a snapshot of `sys.dm_exec_requests`
+                           and `sys.dm_exec_sessions` that gives you running
+                           requests as well as wait types and blocking sessions.
+                           Telegraf's monitoring request is omitted unless it is
+                           a heading blocker. Also includes sleeping sessions
+                           with open transactions.
+- *VolumeSpace*:           uses `sys.dm_os_volume_stats` to get total, used and
+                           occupied space on every disk that contains a data or
+                           log file. (Note that even if enabled it won't get any
+                           data from Azure SQL Database or SQL Managed Instance).
+                           It is pointless to run this with high frequency
+                           (ie: every 10s), but it won't cause any problem.
+- *Cpu*:                   uses the buffer ring (`sys.dm_os_ring_buffers`) to
+                           get CPU data, the table is updated once per minute.
+                           (Note that even if enabled it won't get any data from
+                           Azure SQL Database or SQL Managed Instance).
 
   In order to allow tracking on a per statement basis this query produces a
   unique tag for each query.  Depending on the database workload, this may
@@ -399,15 +444,37 @@ These are metrics for Azure SQL Database (single database) and are very
 similar to version 2 but split out for maintenance reasons, better ability
 to test,differences in DMVs:
 
-- *AzureSQLDBDatabaseIO*: IO stats from `sys.dm_io_virtual_file_stats` including resource governance time, RBPEX, IO for Hyperscale.
-- *AzureSQLDBMemoryClerks*: Memory clerk breakdown from `sys.dm_os_memory_clerks`.
-- *AzureSQLDBResourceGovernance*: Relevant properties indicatign resource limits from `sys.dm_user_db_resource_governance`
-- *AzureSQLDBPerformanceCounters*: A select list of performance counters from `sys.dm_os_performance_counters` including cloud specific counters for SQL Hyperscale.
-- *AzureSQLDBServerProperties*: Relevant Azure SQL relevant properties from  such as Tier, #Vcores, Memory etc, storage, etc.
-- *AzureSQLDBWaitstats*: Wait time in ms from `sys.dm_db_wait_stats`, number of waiting tasks, resource wait time, signal wait time, max wait time in ms, wait type, and wait category. The waits are categorized using the same categories used in Query Store. These waits are collected only as of the end of the a statement. and for a specific database only.
-- *AzureSQLOsWaitstats*: Wait time in ms from `sys.dm_os_wait_stats`, number of waiting tasks, resource wait time, signal wait time, max wait time in ms, wait type, and wait category. The waits are categorized using the same categories used in Query Store. These waits are collected as they occur and instance wide
-- *AzureSQLDBRequests*: Requests which are blocked or have a wait type from `sys.dm_exec_sessions` and `sys.dm_exec_requests`. Telegraf's monitoring request is omitted unless it is a heading blocker
-- *AzureSQLDBSchedulers* - This captures `sys.dm_os_schedulers` snapshots.
+- *AzureSQLDBDatabaseIO*:          IO stats from `sys.dm_io_virtual_file_stats`
+                                   including resource governance time, RBPEX, IO
+                                   for Hyperscale.
+- *AzureSQLDBMemoryClerks*:        Memory clerk breakdown from `sys.dm_os_memory_clerks`.
+- *AzureSQLDBResourceGovernance*:  Relevant properties indicatign resource
+                                   limits from `sys.dm_user_db_resource_governance`
+- *AzureSQLDBPerformanceCounters*: A select list of performance counters from
+                                   `sys.dm_os_performance_counters` including
+                                   cloud specific counters for SQL Hyperscale.
+- *AzureSQLDBServerProperties*:    Relevant Azure SQL relevant properties from
+                                   such as Tier, #Vcores, Memory etc, storage, etc.
+- *AzureSQLDBWaitstats*:           Wait time in ms from `sys.dm_db_wait_stats`,
+                                   number of waiting tasks, resource wait time,
+                                   signal wait time, max wait time in ms, wait
+                                   type, and wait category. The waits are
+                                   categorized using the same categories used in
+                                   Query Store. These waits are collected only
+                                   as of the end of the a statement. and for a
+                                   specific database only.
+- *AzureSQLOsWaitstats*:           Wait time in ms from `sys.dm_os_wait_stats`,
+                                   number of waiting tasks, resource wait time,
+                                   signal wait time, max wait time in ms, wait
+                                   type, and wait category. The waits are
+                                   categorized using the same categories used in
+                                   Query Store. These waits are collected as
+                                   they occur and instance wide
+- *AzureSQLDBRequests*:            Requests which are blocked or have a wait
+                                   type from `sys.dm_exec_sessions` and
+                                   `sys.dm_exec_requests`. Telegraf's monitoring
+                                   request is omitted unless it is a heading blocker
+- *AzureSQLDBSchedulers*:          This captures `sys.dm_os_schedulers` snapshots.
 
 ### Database Type "AzureSQLManagedInstance"
 
@@ -415,13 +482,28 @@ These are metrics for Azure SQL Managed instance, are very similar to version
 2 but split out for maintenance reasons, better ability to test, differences
 in DMVs:
 
-- *AzureSQLMIDatabaseIO*: IO stats from `sys.dm_io_virtual_file_stats` including resource governance time, RBPEX, IO for Hyperscale.
-- *AzureSQLMIMemoryClerks*: Memory clerk breakdown from `sys.dm_os_memory_clerks`.
-- *AzureSQLMIResourceGovernance*: Relevant properties indicatign resource limits from `sys.dm_instance_resource_governance`
-- *AzureSQLMIPerformanceCounters*: A select list of performance counters from `sys.dm_os_performance_counters` including cloud specific counters for SQL Hyperscale.
-- *AzureSQLMIServerProperties*: Relevant Azure SQL relevant properties such as Tier, #Vcores, Memory etc, storage, etc.
-- *AzureSQLMIOsWaitstats*: Wait time in ms from `sys.dm_os_wait_stats`, number of waiting tasks, resource wait time, signal wait time, max wait time in ms, wait type, and wait category. The waits are categorized using the same categories used in Query Store. These waits are collected as they occur and instance wide
-- *AzureSQLMIRequests*: Requests which are blocked or have a wait type from `sys.dm_exec_sessions` and `sys.dm_exec_requests`. Telegraf's monitoring request is omitted unless it is a heading blocker
+- *AzureSQLMIDatabaseIO*:          IO stats from `sys.dm_io_virtual_file_stats`
+                                   including resource governance time, RBPEX, IO
+                                   for Hyperscale.
+- *AzureSQLMIMemoryClerks*:        Memory clerk breakdown from `sys.dm_os_memory_clerks`.
+- *AzureSQLMIResourceGovernance*:  Relevant properties indicatign resource limits
+                                   from `sys.dm_instance_resource_governance`
+- *AzureSQLMIPerformanceCounters*: A select list of performance counters from
+                                  `sys.dm_os_performance_counters` including
+                                   cloud specific counters for SQL Hyperscale.
+- *AzureSQLMIServerProperties*:    Relevant Azure SQL relevant properties such
+                                   as Tier, #Vcores, Memory etc, storage, etc.
+- *AzureSQLMIOsWaitstats*:         Wait time in ms from `sys.dm_os_wait_stats`,
+                                   number of waiting tasks, resource wait time,
+                                   signal wait time, max wait time in ms, wait
+                                   type, and wait category. The waits are
+                                   categorized using the same categories used in
+                                   Query Store. These waits are collected as
+                                   they occur and instance wide
+- *AzureSQLMIRequests*:            Requests which are blocked or have a wait
+                                   type from `sys.dm_exec_sessions` and
+                                   `sys.dm_exec_requests`. Telegraf's monitoring
+                                   request is omitted unless it is a heading blocker
 - *AzureSQLMISchedulers*: This captures `sys.dm_os_schedulers` snapshots.
 
 ### Database Type "AzureSQLPool"
@@ -430,48 +512,117 @@ These are metrics for Azure SQL to monitor resources usage at Elastic Pool
 level. These metrics require additional permissions to be collected, please
 ensure to check additional setup section in this documentation.
 
-- *AzureSQLPoolResourceStats*: Returns resource usage statistics for the current elastic pool in a SQL Database server. Queried from `sys.dm_resource_governor_resource_pools_history_ex`.
-- *AzureSQLPoolResourceGovernance*: Returns actual configuration and capacity settings used by resource governance mechanisms in the current elastic pool. Queried from `sys.dm_user_db_resource_governance`.
-- *AzureSQLPoolDatabaseIO*: Returns I/O statistics for data and log files for each database in the pool. Queried from `sys.dm_io_virtual_file_stats`.
-- *AzureSQLPoolOsWaitStats*: Returns information about all the waits encountered by threads that executed. Queried from `sys.dm_os_wait_stats`.
-- *AzureSQLPoolMemoryClerks*: Memory clerk breakdown from `sys.dm_os_memory_clerks`.
-- *AzureSQLPoolPerformanceCounters*: A selected list of performance counters from `sys.dm_os_performance_counters`. Note: Performance counters where the cntr_type column value is 537003264 are already returned with a percentage format between 0 and 100. For other counters, please check [sys.dm_os_performance_counters](https://docs.microsoft.com/en-us/sql/relational-databases/system-dynamic-management-views/sys-dm-os-performance-counters-transact-sql?view=azuresqldb-current) documentation.
+- *AzureSQLPoolResourceStats*:       Returns resource usage statistics for the
+                                     current elastic pool in a SQL Database
+                                     server. Queried from `sys.dm_resource_governor_resource_pools_history_ex`.
+- *AzureSQLPoolResourceGovernance*:  Returns actual configuration and capacity
+                                     settings used by resource governance
+                                     mechanisms in the current elastic pool.
+                                     Queried from `sys.dm_user_db_resource_governance`.
+- *AzureSQLPoolDatabaseIO*:          Returns I/O statistics for data and log
+                                     files for each database in the pool.
+                                     Queried from `sys.dm_io_virtual_file_stats`.
+- *AzureSQLPoolOsWaitStats*:         Returns information about all the waits
+                                     encountered by threads that executed.
+                                     Queried from `sys.dm_os_wait_stats`.
+- *AzureSQLPoolMemoryClerks*:        Memory clerk breakdown from `sys.dm_os_memory_clerks`.
+- *AzureSQLPoolPerformanceCounters*: A selected list of performance counters
+                                     from `sys.dm_os_performance_counters`.
+                                     Note: Performance counters where the
+                                     cntr_type column value is 537003264 are
+                                     already returned with a percentage format
+                                     between 0 and 100. For other counters,
+                                     please check [sys.dm_os_performance_counters][os_perf_counters]
+                                     documentation.
 - *AzureSQLPoolSchedulers*: This captures `sys.dm_os_schedulers` snapshots.
+
+[os_perf_counters]: https://docs.microsoft.com/en-us/sql/relational-databases/system-dynamic-management-views/sys-dm-os-performance-counters-transact-sql?view=azuresqldb-current
 
 ### Database Type "SQLServer"
 
-- *SQLServerDatabaseIO*: IO stats from `sys.dm_io_virtual_file_stats`
-- *SQLServerMemoryClerks*: Memory clerk breakdown from `sys.dm_os_memory_clerks`, most clerks have been given a friendly name.
-- *SQLServerPerformanceCounters*: A select list of performance counters from `sys.dm_os_performance_counters`. Some of the important metrics included:
-  - *Activity*: Transactions/sec/database, Batch requests/sec, blocked processes, + more
-  - *Availability Groups*: Bytes sent to replica, Bytes received from replica, Log bytes received, Log send queue, transaction delay, + more
-  - *Log activity*: Log bytes flushed/sec, Log flushes/sec, Log Flush Wait Time
-  - *Memory*: PLE, Page reads/sec, Page writes/sec, + more
-  - *TempDB*: Free space, Version store usage, Active temp tables, temp table creation rate, + more
-  - *Resource Governor*: CPU Usage, Requests/sec, Queued Requests, and Blocked tasks per workload group + more
-- *SQLServerProperties*: Number of databases in all possible states (online, offline, suspect, etc.), cpu count, total physical memory, available physical memory, SQL Server service uptime, SQL Server SPID and SQL Server version. In the case of Azure SQL relevant properties such as Tier, #Vcores, Memory etc.
-- *SQLServerWaitStatsCategorized*: Wait time in ms, number of waiting tasks, resource wait time, signal wait time, max wait time in ms, wait type, and wait category. The waits are categorized using the same categories used in Query Store.
-- *SQLServerSchedulers*: This captures `sys.dm_os_schedulers`.
-- *SQLServerRequests*: This captures a snapshot of `sys.dm_exec_requests` and `sys.dm_exec_sessions` that gives you running requests as well as wait types and
-  blocking sessions.
-- *SQLServerVolumeSpace*: Uses `sys.dm_os_volume_stats` to get total, used and occupied space on every disk that contains a data or log file. (Note that even if enabled it won't get any data from Azure SQL Database or SQL Managed Instance). It is pointless to run this with high frequency (ie: every 10s), but it won't cause any problem.
-- SQLServerCpu: Uses the buffer ring (`sys.dm_os_ring_buffers`) to get CPU data, the table is updated once per minute. (Note that even if enabled it won't get any data from Azure SQL Database or SQL Managed Instance).
-- SQLServerAvailabilityReplicaStates: Collects availability replica state information from `sys.dm_hadr_availability_replica_states` for a High Availability / Disaster Recovery (HADR) setup
-- SQLServerDatabaseReplicaStates: Collects database replica state information from `sys.dm_hadr_database_replica_states` for a High Availability / Disaster Recovery (HADR) setup
-- SQLServerRecentBackups: Collects latest full, differential and transaction log backup date and size from `msdb.dbo.backupset`
-- SQLServerPersistentVersionStore: Collects persistent version store information from `sys.dm_tran_persistent_version_store_stats` for databases with Accelerated Database Recovery enabled
+- *SQLServerDatabaseIO*:           IO stats from `sys.dm_io_virtual_file_stats`
+- *SQLServerMemoryClerks*:         Memory clerk breakdown from `sys.dm_os_memory_clerks`,
+                                   most clerks have been given a friendly name.
+- *SQLServerPerformanceCounters*:  A select list of performance counters from
+                                   `sys.dm_os_performance_counters`. Some of the
+                                   important metrics included:
+  - *Activity*:                    Transactions/sec/database, Batch requests/sec,
+                                   blocked processes and more
+  - *Availability Groups*:         Bytes sent to replica, Bytes received from
+                                   replica, Log bytes received, Log send queue,
+                                   transaction delay and more
+  - *Log activity*:                Log bytes flushed/sec, Log flushes/sec,
+                                   Log Flush Wait Time
+  - *Memory*:                      PLE, Page reads/sec, Page writes/sec and more
+  - *TempDB*:                      Free space, Version store usage, Active temp
+                                   tables, temp table creation rate and more
+  - *Resource Governor*:           CPU Usage, Requests/sec, Queued Requests, and
+                                   Blocked tasks per workload group and more
+- *SQLServerProperties*:           Number of databases in all possible states
+                                   (online, offline, suspect, etc.), cpu count,
+                                   total physical memory, available physical memory,
+                                   SQL Server service uptime, SQL Server SPID and
+                                   SQL Server version. In the case of Azure SQL
+                                   relevant properties such as Tier, #Vcores,
+                                   Memory etc.
+- *SQLServerWaitStatsCategorized*: Wait time in ms, number of waiting tasks,
+                                   resource wait time, signal wait time, max
+                                   wait time in ms, wait type, and wait category.
+                                   The waits are categorized using the same
+                                   categories used in Query Store.
+- *SQLServerSchedulers*:           This captures `sys.dm_os_schedulers`.
+- *SQLServerRequests*:             This captures a snapshot of `sys.dm_exec_requests`
+                                   and `sys.dm_exec_sessions` that gives you
+                                   running requests as well as wait types and
+                                   blocking sessions.
+- *SQLServerVolumeSpace*:          Uses `sys.dm_os_volume_stats` to get total,
+                                   used and occupied space on every disk that
+                                   contains a data or log file. (Note that even
+                                   if enabled it won't get any data from Azure
+                                   SQL Database or SQL Managed Instance). It is
+                                   pointless to run this with high frequency
+                                   (ie: every 10s), but it won't cause any problem.
+- SQLServerCpu:                    Uses the buffer ring (`sys.dm_os_ring_buffers`)
+                                   to get CPU data, the table is updated once
+                                   per minute. (Note that even if enabled it
+                                   won't get any data from Azure SQL Database or
+                                   SQL Managed Instance).
+- SQLServerAvailabilityReplicaStates: Collects availability replica state
+                                      information from `sys.dm_hadr_availability_replica_states`
+                                      for a High Availability / Disaster
+                                      Recovery (HADR) setup
+- SQLServerDatabaseReplicaStates:  Collects database replica state information
+                                   from `sys.dm_hadr_database_replica_states`
+                                   for a High Availability / Disaster Recovery
+                                   (HADR) setup
+- SQLServerRecentBackups:          Collects latest full, differential and
+                                   transaction log backup date and size from `msdb.dbo.backupset`
+- SQLServerPersistentVersionStore: Collects persistent version store information
+                                   from `sys.dm_tran_persistent_version_store_stats`
+                                   for databases with Accelerated Database
+                                   Recovery enabled
 
 ### Output Measures
 
 The guiding principal is that all data collected from the same primary DMV ends
 up in the same measure irrespective of database_type.
 
-- `sqlserver_database_io` - Used by  AzureSQLDBDatabaseIO, AzureSQLMIDatabaseIO, SQLServerDatabaseIO, DatabaseIO given the data is from `sys.dm_io_virtual_file_stats`
-- `sqlserver_waitstats` - Used by  WaitStatsCategorized,AzureSQLDBOsWaitstats,AzureSQLMIOsWaitstats
-- `sqlserver_server_properties` - Used by  SQLServerProperties, AzureSQLDBServerProperties , AzureSQLMIServerProperties,ServerProperties
-- `sqlserver_memory_clerks` - Used by SQLServerMemoryClerks, AzureSQLDBMemoryClerks, AzureSQLMIMemoryClerks,MemoryClerk
-- `sqlserver_performance` - Used by  SQLServerPerformanceCounters, AzureSQLDBPerformanceCounters, AzureSQLMIPerformanceCounters,PerformanceCounters
-- `sys.dm_os_schedulers`  - Used by SQLServerSchedulers,AzureSQLDBServerSchedulers, AzureSQLMIServerSchedulers
+- `sqlserver_database_io`       - Used by AzureSQLDBDatabaseIO,
+                                  AzureSQLMIDatabaseIO, SQLServerDatabaseIO,
+                                  DatabaseIO given the data is from `sys.dm_io_virtual_file_stats`
+- `sqlserver_waitstats`         - Used by WaitStatsCategorized,
+                                  AzureSQLDBOsWaitstats, AzureSQLMIOsWaitstats
+- `sqlserver_server_properties` - Used by SQLServerProperties,
+                                  AzureSQLDBServerProperties,
+                                  AzureSQLMIServerProperties, ServerProperties
+- `sqlserver_memory_clerks`     - Used by SQLServerMemoryClerks,
+                                  AzureSQLDBMemoryClerks, AzureSQLMIMemoryClerks,
+                                  MemoryClerk
+- `sqlserver_performance`       - Used by SQLServerPerformanceCounters,
+                                  AzureSQLDBPerformanceCounters,
+                                  AzureSQLMIPerformanceCounters, PerformanceCounters
+- `sys.dm_os_schedulers`        - Used by SQLServerSchedulers,
+                                  AzureSQLDBServerSchedulers, AzureSQLMIServerSchedulers
 
 The following Performance counter metrics can be used directly, with no delta
 calculations:
@@ -513,8 +664,9 @@ calculations:
 
 Version 2 queries have the following tags:
 
-- `sql_instance`: Physical host and instance name (hostname:instance)
-- `database_name`:  For Azure SQLDB, database_name denotes the name of the Azure SQL Database as server name is a logical construct.
+- `sql_instance`:  Physical host and instance name (hostname:instance)
+- `database_name`: For Azure SQLDB, database_name denotes the name of the
+                   Azure SQL Database as server name is a logical construct.
 
 ### Health Metric
 
@@ -531,14 +683,23 @@ connection specified by `servers` in the configuration file.
 
 The health metric emits the following tags:
 
-- `sql_instance` - Name of the server specified in the connection string. This value is emitted as-is in the connection string. If the server could not be parsed from the connection string, a constant placeholder value is emitted
-- `database_name` -  Name of the database or (initial catalog) specified in the connection string. This value is emitted as-is in the connection string. If the database could not be parsed from the connection string, a constant placeholder value is emitted
+- `sql_instance` -   Name of the server specified in the connection string. This
+                     value is emitted as-is in the connection string. If the
+                     server could not be parsed from the connection string, a
+                     constant placeholder value is emitted
+- `database_name` -  Name of the database or (initial catalog) specified in the
+                     connection string. This value is emitted as-is in the
+                     connection string. If the database could not be parsed from
+                     the connection string, a constant placeholder value is
+                     emitted
 
 The health metric emits the following fields:
 
-- `attempted_queries` - Number of queries that were attempted for this connection
+- `attempted_queries`  - Number of queries that were attempted for this connection
 - `successful_queries` - Number of queries that completed successfully for this connection
-- `database_type` - Type of database as specified by `database_type`. If `database_type` is empty, the `QueryVersion` and `AzureDB` fields are concatenated instead
+- `database_type`      - Type of database as specified by `database_type`.
+                         If `database_type` is empty, the `QueryVersion` and
+                         `AzureDB` fields are concatenated instead
 
 If `attempted_queries` and `successful_queries` are not equal for
 a given connection, some metrics were not successfully gathered for

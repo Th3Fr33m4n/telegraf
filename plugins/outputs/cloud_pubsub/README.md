@@ -9,10 +9,9 @@ of the supported [data formats][data_formats].
 
 ## Global configuration options <!-- @/docs/includes/plugin_config.md -->
 
-In addition to the plugin-specific configuration settings, plugins support
-additional global and plugin configuration settings. These settings are used to
-modify metrics, tags, and field or create aliases and configure ordering, etc.
-See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
+Plugins support additional global and plugin configuration settings for tasks
+such as modifying metrics, tags, and fields, creating aliases, and configuring
+plugin ordering. See [CONFIGURATION.md][CONFIGURATION.md] for more details.
 
 [CONFIGURATION.md]: ../../../docs/CONFIGURATION.md#plugins
 
@@ -48,7 +47,7 @@ See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
 
   ## The following publish_* parameters specifically configures batching
   ## requests made to the GCP Cloud PubSub API via the PubSub Golang library. Read
-  ## more here: https://godoc.org/cloud.google.com/go/pubsub#PublishSettings
+  ## more here: https://godoc.org/cloud.google.com/go/pubsub/v2#PublishSettings
 
   ## Optional. Send a request to PubSub (i.e. actually publish a batch)
   ## when it has this many PubSub messages. If send_batched is true,

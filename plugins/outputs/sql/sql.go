@@ -193,6 +193,8 @@ func (p *SQL) deriveDatatype(value interface{}) string {
 		datatype = p.Convert.Text
 	case bool:
 		datatype = p.Convert.Bool
+	case time.Time:
+		datatype = p.Convert.Timestamp
 	default:
 		datatype = p.Convert.Defaultvalue
 		p.Log.Errorf("Unknown datatype: '%T' %v", value, value)
@@ -309,7 +311,15 @@ func (p *SQL) tableExists(tableName string) bool {
 	stmt := strings.ReplaceAll(p.TableExistsTemplate, "{TABLE}", quoteIdent(tableName))
 
 	_, err := p.db.Exec(stmt)
-	return err == nil
+
+	// Make sure to update the table cache to not query the table existence in
+	// every write cycle
+	exists := err == nil
+	if _, found := p.tables[tableName]; exists && !found {
+		p.tables[tableName] = make(map[string]bool)
+	}
+
+	return exists
 }
 
 func (p *SQL) updateTableCache(tablename string) error {

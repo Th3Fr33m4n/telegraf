@@ -26,10 +26,9 @@ normal plugins:
 
 ## Global configuration options <!-- @/docs/includes/plugin_config.md -->
 
-In addition to the plugin-specific configuration settings, plugins support
-additional global and plugin configuration settings. These settings are used to
-modify metrics, tags, and field or create aliases and configure ordering, etc.
-See the [CONFIGURATION.md][CONFIGURATION.md] for more details.
+Plugins support additional global and plugin configuration settings for tasks
+such as modifying metrics, tags, and fields, creating aliases, and configuring
+plugin ordering. See [CONFIGURATION.md][CONFIGURATION.md] for more details.
 
 [CONFIGURATION.md]: ../../../docs/CONFIGURATION.md#plugins
 
@@ -102,7 +101,8 @@ All fields for Suricata stats are numeric.
 
 - suricata
   - tags:
-    - thread: `Global` for global statistics (if enabled), thread IDs (e.g. `W#03-enp0s31f6`) for thread-specific statistics
+    - thread: `Global` for global statistics (if enabled), thread IDs
+              (e.g. `W#03-enp0s31f6`) for thread-specific statistics
   - fields:
     - app_layer_flow_dcerpc_udp
     - app_layer_flow_dns_tcp
